@@ -67,44 +67,26 @@ static struct lws_protocols protocols[] =
 	LWS_PROTOCOL_LIST_TERM /* terminator */
 };
 
-//3409328527 Beatrice
-
 int main(int argc, char *argv[])
 {
 	/* the following stuff is just for the development process,
 	   it is usefull to have a way to sand a message to the micro
 	*/
-	if (STR_ARE_EQUAL("sono gay", "sono gay"))
-		printf("str are equal!\n");
-	else
-		printf("str are NOT equal!\n");
-	return 0;
-
-	BYTE *command = NULL;
-	int cmdlen = 0;
-	if (argc == 2) {
-		cmdlen = strlen(argv[1]);
-		command = malloc(cmdlen + 1);
-		memcpy(command, argv[1], cmdlen);
-		command[cmdlen] = '\0';
-		printf("command %s will be send\n", command);
-	} else {
-		printf("no command provided, opt to \"status\"\n");
-		command = "status";
-	}
 	//first thing first, let's get the mac address
 	printf("Starting client init...\n");
 	printf("\tRetriving MAC address\n");
 	unsigned char mac[6];
-	if (!get_mac_addr(mac)) {
+	if (get_mac_addr(mac) == ERR) {
 		printf("\tThere was an error on the MAC ADDRESS recover\n");
 		// just crash the program, there is no way to recover from this error
-		return -1;
+		return ERR;
 	}
+
+	// SET TIME, move this to utils and a dedicated struct
 	printf("Setting timezone\n");
 	struct tm *mt;
 	time_t mtt;
-	char ftime[sizeof("%d-%m-%Y, %H:%M:%S")];
+	char ftime[128];
 	setenv("TZ", "Europe/Rome", 1);
 	tzset();
 	mtt = time(NULL);
@@ -116,17 +98,36 @@ int main(int argc, char *argv[])
 	// micro setup
 	struct termios tty;
 	int fd;
-	if (!serial_init(&tty, &fd))
-		return -1;
-	while (1) {
-		write_serial(fd, command, strlen((char *)command));
-		char *out_string;
-		int out_len;
-		read_serial(fd, &out_string, &out_len);
-		free(out_string);
-		sleep(2);
+	const char *command = "set max amp 1600";
+	type_cmd cmdt = CMD_NOTHING;
+	if (serial_init(&tty, &fd) != NO_ERR)
+		return ERR;
+	// all of this will move to the dedicated ws api
+	if ((cmdt = serial_command_is_valid(command)) == CMD_NOTHING) {
+		printf("ERROR, serial command is invalid\n");
+		return ERR;
 	}
-	return 0;
+	if (cmdt == cmd_set_amp) {
+		int amp = 0;
+		if ((amp = serial_extract_amp_from_str(command)) == ERR) {
+			printf("ERROR, serial command \"set max amp\" is invalid\n");
+			return ERR;
+		}
+		serial_set_amp(amp);
+	} else if (cmdt == cmd_start) {
+		serial_start();
+	} else if (cmdt == cmd_stop) {
+		serial_stop();
+	} else if (cmdt == cmd_status) {
+		serial_status();
+	}
+	return NO_ERR;
+	//write_serial(fd, (BYTE *)command, strlen((char *)command));
+	char *out_string;
+	int out_len;
+	read_serial(fd, &out_string, &out_len);
+	free(out_string);
+	sleep(2);
 	// ========================================
 	// ws client
 	// ========================================
@@ -164,7 +165,7 @@ int main(int argc, char *argv[])
 
 		if( tv.tv_sec != old )
 		{
-			/* Send a random number to the server every second. */
+			/* Send a random numbrer to the server every second. */
 			lws_callback_on_writable( web_socket );
 			old = tv.tv_sec;
 		}
@@ -174,5 +175,5 @@ int main(int argc, char *argv[])
 
 	lws_context_destroy( context );
 
-	return 0;
+	return NO_ERR;
 }
