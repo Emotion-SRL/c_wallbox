@@ -8,12 +8,40 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <json.h>
+
 #include "serial.h"
+
+int load_file_nul_str(const char *path, char **out)
+{
+	FILE *fs;
+	if (!(fs = fopen(path, "r"))) {
+		printf("ERROR on load file, fopen failed\n");
+		return ERR;
+	}
+	if (fseek(fs, 0, SEEK_END) != NO_ERR) {
+		printf("ERROR on load file, fseek failed\n");
+		return ERR;
+	}
+	int len = 0;
+	if ((len = ftell(fs)) == ERR) {
+		printf("ERROR on load file, ftell failed\n");
+		return ERR;
+	}
+	printf("len: %d\n", len);
+	rewind(fs); /*from the manual: "The rewind() function returns no value."
+		      so there is no fucking way on doing error checking Dio Insetto
+		      i mean, i could check if fs position is NOT at start, but non ne ho voglia*/
+	(*out) = malloc(len + 1); // +1 for the '\0'[NULL] character
+	fread((*out), 1, len, fs);
+	(*out)[len] = '\0';
+	//PRINTF_DEBUG("file read: %s\n", (*out));
+	return NO_ERR;
+}
 
 /*
   dynamic arrays functions
 */
-
 dyn_array *da_alloc(size_t el_size)
 {
 	if (el_size == 0) {

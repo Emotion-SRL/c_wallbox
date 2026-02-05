@@ -6,6 +6,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <json.h>
 
 #include "utils.h"
 #include "serial.h"
@@ -69,6 +70,11 @@ static struct lws_protocols protocols[] =
 
 int main(int argc, char *argv[])
 {
+	struct json_object *jobj;
+	char *json_str;
+	load_file_nul_str("test.json", &json_str);
+	json_deserialize(json_str, &jobj);
+	return 0;
 	/* the following stuff is just for the development process,
 	   it is usefull to have a way to sand a message to the micro
 	*/

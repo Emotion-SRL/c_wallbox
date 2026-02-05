@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <json.h>
 #define MAC_ADDR_SIZE 6
 #define BYTE unsigned char
 #define DYN_ARRAY_SIZE_MULTIPLIER 2
@@ -34,6 +35,8 @@ typedef struct {
 	size_t el_size;
 } dyn_array;
 
+int load_file_nul_str(const char *path, char **out);
+
 int get_mac_addr(unsigned char mac_addr[MAC_ADDR_SIZE]);
 
 // return NULL on fail
@@ -48,3 +51,4 @@ int da_free(dyn_array *da);
 // return ERR if fails, NO_ERR otherwise
 int ascii_to_int(const char *s, int *out);
 int micro_command_is_valid(const char *command, int command_size);
+int json_deserialize(const char *json_str, struct json_object **jobj);
