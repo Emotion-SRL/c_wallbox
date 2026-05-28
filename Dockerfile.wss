@@ -1,0 +1,23 @@
+FROM emotionsrl/omega2-toolchain:latest
+
+USER builder
+
+# Clona libwebsockets
+RUN git clone https://libwebsockets.org/repo/libwebsockets /home/builder/libwebsockets-wss
+
+WORKDIR /home/builder/libwebsockets-wss
+
+# Cross-compila per MIPS con supporto SSL (WSS)
+RUN mkdir build && cd build && \
+    cmake .. \
+      -DCMAKE_C_COMPILER=/home/builder/source/staging_dir/toolchain-mipsel_24kc_gcc-7.3.0_musl/bin/mipsel-openwrt-linux-gcc \
+      -DCMAKE_STAGING_PREFIX=/home/builder/source/staging_dir/target-mipsel_24kc_musl/usr \
+      -DOPENSSL_ROOT_DIR=/home/builder/source/staging_dir/target-mipsel_24kc_musl/usr \
+      -DLWS_WITH_SSL=ON \
+      -DLWS_WITHOUT_TESTAPPS=ON \
+      -DLWS_WITHOUT_TEST_SERVER=ON \
+      -DCMAKE_SYSTEM_NAME=Linux \
+      -DCMAKE_SYSTEM_PROCESSOR=mips \
+      && make
+
+WORKDIR /home/builder

@@ -1,0 +1,19 @@
+{
+ "boot_notification": {
+    "serial_number": "string",
+    "password": "MAC address",
+    "ip_address": "192.168.x.x",
+    "max_ampere": 32,
+    "status": "CONNECTED"
+  }
+}
+
+{
+  "realtime": {
+    "serial_number": "string",
+    "password": "MAC address",
+    "ampere": 1600,
+    "temperature": "23.45 C",
+    "status": "CHARGING"
+  },
+}

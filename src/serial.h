@@ -35,14 +35,21 @@ extern serial_cmds cmds;
   this function allocate size memory on the heap, the programmer
   is responsable for deallocating the buffer when is not needed anymore
  n*/
-int serial_init(struct termios *tty, int *fd);
+int serial_init();
 int serial_set_amp(int amp);
 int serial_start();
 int serial_stop();
-int serial_status();
+int serial_status(char **status);
 
 /*this function allocates memory for the pointer <out_string>, the programmer
   is responsable for deallocating the buffer when is not needed anymore*/
-int read_serial(int fd, char **out_string, int *out_len);
+int read_serial(char **out_string);
 int serial_extract_amp_from_str(const char *command);
 type_cmd serial_command_is_valid(const char *command);
+
+typedef enum {
+	m_boot,
+	m_status,
+} msg_type;
+
+const char *json_make_message(msg_type type);

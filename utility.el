@@ -1,14 +1,16 @@
+; look for Omega-3D16 on nmap
+
 (defun onion-build (target)
   (interactive "sMake target (empty = default): ")
   (copy-directory
    "/home/carlo_m/programming/emotion/wallbox/c_ws/src"
-   "/docker:builder@onion-builder:/home/builder/src"
+   "/docker:builder@onion-builder-wss:/home/builder/src"
    t  ;; keep-time
    t  ;; parents
    t) ;; copy-contents
   (copy-file
    "/home/carlo_m/programming/emotion/wallbox/c_ws/Makefile"
-   "/docker:builder@onion-builder:/home/builder/Makefile" t)
+   "/docker:builder@onion-builder-wss:/home/builder/Makefile" t)
   (let ((cmd (if (string-empty-p target)
                  "make"
                (format "make %s" target))))
@@ -37,12 +39,12 @@
   (onion--wait-and-connect ip))
 
 (defun onion--wait-and-connect (ip)
-  "Wait for onion-builder container, then open TRAMP dired buffers."
+  "Wait for onion-builder-wss container, then open TRAMP dired buffers."
   (if (= 0 (call-process "docker" nil nil nil
-                          "inspect" "-f" "{{.State.Running}}" "onion-builder"))
+                          "inspect" "-f" "{{.State.Running}}" "onion-builder-wss"))
       (progn
         (with-current-buffer
-            (dired "/docker:builder@onion-builder:/home/builder/")
+            (dired "/docker:builder@onion-builder-wss:/home/builder/")
           (rename-buffer "container" t))
         (with-current-buffer
             (dired (format "/ssh:root@%s:/root/" ip))

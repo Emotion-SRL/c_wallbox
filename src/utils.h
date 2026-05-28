@@ -35,9 +35,14 @@ typedef struct {
 	size_t el_size;
 } dyn_array;
 
+int wallbox_identity_init(void);
+char *get_serial_number();
+unsigned char *get_mac_address();
+
 int load_file_nul_str(const char *path, char **out);
 
-int get_mac_addr(unsigned char mac_addr[MAC_ADDR_SIZE]);
+int retrive_mac_addr(unsigned char mac_addr[MAC_ADDR_SIZE]);
+int read_serial_number(char **out);
 
 // return NULL on fail
 dyn_array *da_alloc(size_t el_size);
@@ -51,4 +56,12 @@ int da_free(dyn_array *da);
 // return ERR if fails, NO_ERR otherwise
 int ascii_to_int(const char *s, int *out);
 int micro_command_is_valid(const char *command, int command_size);
+
+/*json api docs https://json-c.github.io/json-c/json-c-0.10/doc/html/json__object_8h.html */
 int json_deserialize(const char *json_str, struct json_object **jobj);
+
+/* time related functions
+   time is an opaque struct for clear reasons
+ */
+int local_time_init(void);
+char *local_time_get_time(void);

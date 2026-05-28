@@ -1,0 +1,7 @@
+* Wallbox WS client [2/6]
+- [X] JSON shape: togliere wrapper ~boot_notification~/~realtime~, campi al top level (~serial_number~, ~password~, ~ip_address~ solo boot, ~status~); rimuovere ~max_ampere~/~ampere~/~temperature~ — ~src/serial.c~
+- [X] IP placeholder ~127.0.0.1~ (il server usa solo ~is_some()~) — ~src/serial.c~
+- [ ] RECEIVE callback: parsare ~"<cmd> <val>"~ dal server e girare via ~write_serial~, niente ~lws_write~ dentro RECEIVE — ~src/ws.c:20-29~
+- [ ] Reset ~client.on_boot = true~ su ~CLOSED~/~CONNECTION_ERROR~ — ~src/ws.c:46-49~
+- [ ] Path WS dinamico col serial number invece di ~/new-ocpp/38~ — ~src/ws.c:85~
+- [ ] Backoff riconnessione (1->2->5->30s) invece di retry al secondo — ~src/main.c:38~

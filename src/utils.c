@@ -3,6 +3,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <unistd.h>
+#include <time.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <stdlib.h>
@@ -11,6 +12,62 @@
 #include <json.h>
 
 #include "serial.h"
+
+typedef struct {
+	struct tm *mt;
+	time_t mtt;
+	char ftime[128];
+} local_time;
+
+typedef struct {
+	unsigned char mac[6];
+	char *serial_number;
+} wb_id;
+
+static local_time t = {0};
+static wb_id id = {0};
+
+char *get_serial_number()
+{
+	return id.serial_number;
+}
+
+unsigned char *get_mac_address()
+{
+	return id.mac;
+}
+
+int wallbox_identity_init(void)
+{
+	if (retrive_mac_addr(id.mac) == ERR)
+		return ERR;
+	/* let's just read the file */
+	if (load_file_nul_str("serial_number.txt", &id.serial_number) == ERR)
+		return ERR;
+	char *tmp = NULL;
+	if ((tmp = strchr(id.serial_number, '\n')) != NULL) {
+		/* then there is a new line to be removed */
+		*tmp = '\0';
+	}
+	printf("serial number: %s\n", id.serial_number);
+	return NO_ERR;
+}
+
+int local_time_init(void)
+{
+	setenv("TZ", "Europe/Rome", 1);
+	tzset();
+	t.mtt = time(NULL);
+	t.mt = localtime(&t.mtt);
+	strftime(t.ftime, sizeof(t.ftime), "%d-%m-%Y, %H:%M:%S", t.mt);
+	return NO_ERR;
+}
+
+char *local_time_get_time(void)
+{
+	strftime(t.ftime, sizeof(t.ftime), "%d-%m-%Y, %H:%M:%S", t.mt);
+	return t.ftime;
+}
 
 int load_file_nul_str(const char *path, char **out)
 {
@@ -81,7 +138,7 @@ int da_append(dyn_array *da, BYTE *new_el)
 	BYTE *b = (BYTE *)(da->data + (da->el_size * da->count));
 	// then, raw copy data from new element to the byte pointer
 	// the size given to memcpy is, ofcourse, the size of the element type
-	memcpy (b, new_el, da->el_size);
+	memcpy(b, new_el, da->el_size);
 	da->count++;
 	return NO_ERR;
 }
@@ -102,50 +159,32 @@ int da_free(dyn_array *da)
 	return NO_ERR;
 }
 
-int get_mac_addr(unsigned char mac_addr[MAC_ADDR_SIZE])
+#define MAC_IFACE "br-wlan"
+
+int retrive_mac_addr(unsigned char mac_addr[MAC_ADDR_SIZE])
 {
-	struct ifreq ifr;
-	struct ifconf ifc;
-	char buf[1024];
-	int success = ERR;
-
 	int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-	if (sock == -1) { /* handle error*/ };
-
-	ifc.ifc_len = sizeof(buf);
-	ifc.ifc_buf = buf;
-	if (ioctl(sock, SIOCGIFCONF, &ifc) == -1) { /* handle error */ }
-
-	struct ifreq* it = ifc.ifc_req;
-	const struct ifreq* const end = it + (ifc.ifc_len / sizeof(struct ifreq));
-
-	for (; it != end; ++it) {
-		strcpy(ifr.ifr_name, it->ifr_name);
-		if (ioctl(sock, SIOCGIFFLAGS, &ifr) == 0) {
-			if (! (ifr.ifr_flags & IFF_LOOPBACK)) { // don't count loopback
-				if (ioctl(sock, SIOCGIFHWADDR, &ifr) == 0) {
-					success = NO_ERR;
-					break;
-				}
-			}
-		}
-		else { /* handle error */ }
-
+	if (sock == -1)
+		return ERR;
+	struct ifreq ifr = {0};
+	strncpy(ifr.ifr_name, MAC_IFACE, IFNAMSIZ - 1);
+	if (ioctl(sock, SIOCGIFHWADDR, &ifr) != 0) {
+		close(sock);
+		return ERR;
 	}
-	if (success == NO_ERR) {
-		printf("\tMAC address recovered: ");
-		memcpy(mac_addr, ifr.ifr_hwaddr.sa_data, 6);
-		for (int i = 0; i < MAC_ADDR_SIZE; i++) {
-			printf("%.2X", mac_addr[i]);
-			if (i != MAC_ADDR_SIZE - 1)
-				printf(":");
-		}
-		printf("\n");
+	close(sock);
+	memcpy(mac_addr, ifr.ifr_hwaddr.sa_data, MAC_ADDR_SIZE);
+	printf("\tMAC address recovered from " MAC_IFACE ": ");
+	for (int i = 0; i < MAC_ADDR_SIZE; i++) {
+		printf("%.2X", mac_addr[i]);
+		if (i != MAC_ADDR_SIZE - 1)
+			printf(":");
 	}
-	return success;
+	printf("\n");
+	return NO_ERR;
 }
 
-// return ERR if fails, NO_ERR otherwise
+/* return ERR if fails, NO_ERR otherwise */
 int ascii_to_int(const char *s, int *out)
 {
 	const int MAX_SIZE = 5; // i will never need more then 4 digits
@@ -192,6 +231,5 @@ int ascii_to_int(const char *s, int *out)
 int json_deserialize(const char *json_str, struct json_object **jobj)
 {
 	*jobj = json_tokener_parse(json_str);
-	printf("jobj from str:\n---\n%s\n---\n", json_object_to_json_string_ext(*jobj, JSON_C_TO_STRING_SPACED | JSON_C_TO_STRING_PRETTY));
 	return NO_ERR;
 }

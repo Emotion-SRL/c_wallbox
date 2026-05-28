@@ -1,2 +1,2 @@
-docker run -it --name onion-builder --rm emotionsrl/omega2-toolchain:latest bash
+docker run -it --name onion-builder-wss --rm onion-builder-wss bash
 

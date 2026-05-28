@@ -74,7 +74,7 @@ int main(void)
 		}
 		char *response = NULL;
 		int outlen = 0;
-		if (read_serial(fd, &response, &outlen) != 0) {
+		if (read_serial(&response) != 0) {
 			printf(CLI_PREFIX"There was an error reading from serial, exiting...\n");
 			sleep(3);
 			return -1;
