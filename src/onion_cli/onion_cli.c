@@ -2,6 +2,7 @@
 
 #include <termios.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -12,7 +13,7 @@
 #define NO_INPUT 1
 #define TOO_LONG 2
 
-int write_serial(int fd, BYTE *write_buffer, int buffer_size);
+int write_serial(char *write_buffer);
 
 static int getLine (char *prmpt, char *buff, size_t sz)
 {
@@ -45,9 +46,7 @@ static int getLine (char *prmpt, char *buff, size_t sz)
  */
 int main(void)
 {
-	struct termios tty;
-	int fd;
-	if (serial_init(&tty, &fd) != 0) {
+	if (serial_init() != 0) {
 		printf(CLI_PREFIX"Error on serial initialization\n");
 		return -1;
 	}
@@ -67,20 +66,23 @@ int main(void)
 			return 1;
 		}
 		// else input is ok
-		if (write_serial(fd, buff, ARRAY_SIZE(buff)) != 0) {
+		if (write_serial(buff) != 0) {
 			printf(CLI_PREFIX"There was an error writing on serial, exiting...\n");
 			sleep(3);
 			return -1;
 		}
 		char *response = NULL;
-		int outlen = 0;
 		if (read_serial(&response) != 0) {
 			printf(CLI_PREFIX"There was an error reading from serial, exiting...\n");
 			sleep(3);
 			return -1;
 		}
-		if (outlen == 0)
+		if (response == NULL) {
 			printf(CLI_PREFIX"Nothing to read from serial\n");
+		} else {
+			printf(CLI_PREFIX"%s\n", response);
+			free(response);
+		}
 	}
 	return 0;
 }

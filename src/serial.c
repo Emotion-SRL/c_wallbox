@@ -14,7 +14,7 @@ serial_cmds cmds = {
 	.start   = "start",
 	.stop    = "stop",
 	.status  = "status",
-	.set_amp = "set max amp",
+	.set_amp = "max amp",
 };
 
 #ifdef DEBUG
@@ -205,13 +205,34 @@ const char *json_make_message(msg_type type)
 		return NULL;
 	for (int i = 0; i < MAC_ADDR_SIZE; i++)
 		sprintf(mac_str + (i * 2), "%.2X", mac[i]);
-	const char *state = json_object_get_string(json_object_object_get(json_status, "State"));
+	const char *raw = json_object_get_string(json_object_object_get(json_status, "State"));
+	char state[64] = {0};
+	if (raw != NULL) {
+		if (STR_ARE_EQUAL(raw, "STOPPED-NOT_CONNECTED")) {
+			/* no STOPPED_NOT_CONNECTED in the server enum: fall back to NOT_CONNECTED */
+			snprintf(state, sizeof(state), "NOT_CONNECTED");
+		} else {
+			/* firmware emits STOPPED-* with hyphens, the server enum uses underscores */
+			size_t i;
+			for (i = 0; raw[i] != '\0' && i < sizeof(state) - 1; i++)
+				state[i] = (raw[i] == '-') ? '_' : raw[i];
+			state[i] = '\0';
+		}
+	}
+
+	/* ampere = IRMS_L1 * 100; like onion_G.py it picks identification vs realtime */
+	int max_amps = json_object_get_int(json_object_object_get(json_status, "Max_amps"));
+	int ampere = (int)(json_object_get_double(json_object_object_get(json_status, "IRMS_L1")) * 100);
 
 	json_object *jobj = json_object_new_object();
 	json_object_object_add(jobj, "serial_number", json_object_new_string(get_serial_number()));
 	json_object_object_add(jobj, "password", json_object_new_string(mac_str));
 	json_object_object_add(jobj, "status", json_object_new_string(state));
-	if (type == m_boot)
+	if (type == m_boot || ampere < 500) {
 		json_object_object_add(jobj, "ip_address", json_object_new_string("127.0.0.1"));
+		json_object_object_add(jobj, "max_ampere", json_object_new_int(max_amps));
+	} else {
+		json_object_object_add(jobj, "ampere", json_object_new_int(ampere));
+	}
 	return json_object_to_json_string_ext(jobj, 0);
 }

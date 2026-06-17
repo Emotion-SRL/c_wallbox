@@ -7,6 +7,7 @@
 
 #include "utils.h"
 #include "serial.h"
+#include "server_cmd.h"
 
 ws_client client = {0};
 
@@ -18,24 +19,21 @@ static int protocol_callback(struct lws *wsi, enum lws_callback_reasons reason, 
 		lws_callback_on_writable(wsi);
 		break;
 	case LWS_CALLBACK_CLIENT_RECEIVE:
-		if (strncmp(in, "status", len) == 0) {
-			printf("status request recieved from server\n");
-			const char *json = json_make_message(m_status);
-			unsigned char buf[LWS_SEND_BUFFER_PRE_PADDING + strlen(json) + LWS_SEND_BUFFER_POST_PADDING/*this last one is fucking 0*/];
-			memcpy(buf + LWS_SEND_BUFFER_PRE_PADDING, json, strlen(json));
-			lws_write(wsi, buf + LWS_SEND_BUFFER_PRE_PADDING, strlen(json), LWS_WRITE_TEXT);
-		}
-		printf("Response recived\n");
+		handle_server_command(wsi, in, len);
 		break;
 	case LWS_CALLBACK_CLIENT_WRITEABLE: {
 		const char *json = NULL;
 		if (client.on_boot) {
 			printf("\tsending boot notification...\n");
 			json = json_make_message(m_boot);
-			client.on_boot = false;
 		} else {
 			json = json_make_message(m_status);
 		}
+		if (json == NULL) {
+			printf("\tjson_make_message returned NULL, skipping send\n");
+			break;
+		}
+		client.on_boot = false;
 		printf("%s\n", json);
 		int json_len = strlen(json);
 		unsigned char buf[LWS_SEND_BUFFER_PRE_PADDING + json_len + LWS_SEND_BUFFER_POST_PADDING/*this last one is fucking 0*/];
@@ -46,6 +44,7 @@ static int protocol_callback(struct lws *wsi, enum lws_callback_reasons reason, 
 	case LWS_CALLBACK_CLIENT_CLOSED:
 	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
 		client.web_socket = NULL;
+		client.on_boot = true;
 		break;
 	default:
 		break;
@@ -80,11 +79,11 @@ void ws_client_init()
 
 	client.context = lws_create_context(&(client.info));
 	client.ccinfo.context = client.context;
-	client.ccinfo.address = "emotion-test.eu";
+	client.ccinfo.address = "emotion-projects.eu";
 	client.ccinfo.port = 443;
-	client.ccinfo.path = "/new-ocpp/38";
-	client.ccinfo.host = "emotion-test.eu";
-	client.ccinfo.origin = "emotion-test.eu";
+	client.ccinfo.path = "/wallbox";
+	client.ccinfo.host = "emotion-projects.eu";
+	client.ccinfo.origin = "emotion-projects.eu";
 	client.ccinfo.ssl_connection = LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED | LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK;
 	client.ccinfo.protocol = protocols[PROTOCOL_WALLBOX].name;
 }
@@ -98,6 +97,8 @@ int ws_connect()
 
 void ws_on_writable()
 {
+	if (client.web_socket == NULL)
+		return;
 	lws_callback_on_writable(client.web_socket);
 }
 

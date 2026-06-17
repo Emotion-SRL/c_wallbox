@@ -8,7 +8,7 @@ CFLAGS=-I/home/builder/libwebsockets-wss/include -I$(TARGET_DIR)/include -I$(TAR
 LDFLAGS=-L/home/builder/libwebsockets-wss/build/lib -L$(TARGET_DIR)/lib -Wl,-rpath-link,$(TARGET_DIR)/lib
 STATIC_LIBS=-l:libwebsockets.a -l:libssl.a -l:libcrypto.a -l:libjson-c.a
 LIBS=-lwebsockets -lssl -lcrypto -ljson-c
-SRC=src/main.c src/utils.c src/serial.c src/ws.c
+SRC=src/main.c src/utils.c src/serial.c src/ws.c src/server_cmd.c
 CLI_SRC=src/onion_cli/onion_cli.c src/serial.c src/utils.c
 COMPFLAGS=-Wall #-Wextra #-Wpedantic
 
@@ -16,10 +16,11 @@ COMPFLAGS=-Wall #-Wextra #-Wpedantic
 RAY_SRC=src/ray/main.c
 #end of stupid
 
-#$(COMPILER) $(CFLAGS) -o onion_cli $(CLI_SRC) $(LDFLAGS) -ljson-c -Wno-deprecated-declarations
-
 ws_client: $(SRC) $(CLI_SRC)
 	$(COMPILER) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS) $(STATIC_LIBS) $(COMPFLAGS) -g -Wno-deprecated-declarations
+
+cli:
+	$(COMPILER) $(CFLAGS) -o onion_cli $(CLI_SRC) $(LDFLAGS) -ljson-c -Wno-deprecated-declarations
 
 release: $(SRC)
 	$(COMPILER) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(STATIC_LIBS) $(COMPFLAGS) -O3

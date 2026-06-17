@@ -32,6 +32,7 @@ int main(void)
 	if (serial_init(&tty, &fd) != NO_ERR)
 		return ERR;
 	time_t old = 0;
+	time_t last_push = 0;
 	struct timeval tv;
 	while (1) {
 		gettimeofday(&tv, NULL);
@@ -40,8 +41,11 @@ int main(void)
 			ws_connect();
 		}
 		if (tv.tv_sec != old) {
-			ws_on_writable();
 			old = tv.tv_sec;
+		}
+		if (tv.tv_sec - last_push >= 30) {
+			ws_on_writable();
+			last_push = tv.tv_sec;
 		}
 		lws_service(ws_get_context(), 250);
 	}

@@ -231,5 +231,7 @@ int ascii_to_int(const char *s, int *out)
 int json_deserialize(const char *json_str, struct json_object **jobj)
 {
 	*jobj = json_tokener_parse(json_str);
+	if (*jobj == NULL)
+		return ERR;
 	return NO_ERR;
 }
