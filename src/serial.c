@@ -86,6 +86,13 @@ int write_serial(char *write_buffer)
 	} else {
 		printf("\tBuffer written on serial, bytes written: %d\n", bytes_written);
 	}
+	/* the firmware reads with readStringUntil('\n') and does an exact match
+	   (command == "start"): terminate every command so reads don't merge */
+	if (write(serial_com.fd, "\n", 1) == -1) {
+		printf("\tError writing newline terminator on serial port\n");
+		close(serial_com.fd);
+		return ERR;
+	}
 	printf("+----------------------------------+\n\n");
 	return NO_ERR;
 }
@@ -205,20 +212,10 @@ const char *json_make_message(msg_type type)
 		return NULL;
 	for (int i = 0; i < MAC_ADDR_SIZE; i++)
 		sprintf(mac_str + (i * 2), "%.2X", mac[i]);
+	/* status is forwarded verbatim: the firmware states (with hyphens) already
+	   match the Django StatusChoice values exactly, no mapping needed */
 	const char *raw = json_object_get_string(json_object_object_get(json_status, "State"));
-	char state[64] = {0};
-	if (raw != NULL) {
-		if (STR_ARE_EQUAL(raw, "STOPPED-NOT_CONNECTED")) {
-			/* no STOPPED_NOT_CONNECTED in the server enum: fall back to NOT_CONNECTED */
-			snprintf(state, sizeof(state), "NOT_CONNECTED");
-		} else {
-			/* firmware emits STOPPED-* with hyphens, the server enum uses underscores */
-			size_t i;
-			for (i = 0; raw[i] != '\0' && i < sizeof(state) - 1; i++)
-				state[i] = (raw[i] == '-') ? '_' : raw[i];
-			state[i] = '\0';
-		}
-	}
+	const char *state = (raw != NULL) ? raw : "";
 
 	/* ampere = IRMS_L1 * 100; like onion_G.py it picks identification vs realtime */
 	int max_amps = json_object_get_int(json_object_object_get(json_status, "Max_amps"));
