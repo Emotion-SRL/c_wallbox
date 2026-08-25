@@ -27,6 +27,18 @@ typedef struct {
 static local_time t = {0};
 static wb_id id = {0};
 
+FILE *g_log_file = NULL;
+
+int log_file_init(const char *path)
+{
+	g_log_file = fopen(path, "w");   /* "w" truncates -> fresh log on every start */
+	if (g_log_file == NULL) {
+		LOG_ERR("ERROR on log_file_init, could not open %s\n", path);
+		return ERR;
+	}
+	return NO_ERR;
+}
+
 char *get_serial_number()
 {
 	return id.serial_number;
@@ -49,7 +61,7 @@ int wallbox_identity_init(void)
 		/* then there is a new line to be removed */
 		*tmp = '\0';
 	}
-	printf("serial number: %s\n", id.serial_number);
+	LOG_DBG("serial number: %s\n", id.serial_number);
 	return NO_ERR;
 }
 
@@ -73,26 +85,26 @@ int load_file_nul_str(const char *path, char **out)
 {
 	FILE *fs;
 	if (!(fs = fopen(path, "r"))) {
-		printf("ERROR on load file, fopen failed\n");
+		LOG_ERR("ERROR on load file, fopen failed\n");
 		return ERR;
 	}
 	if (fseek(fs, 0, SEEK_END) != NO_ERR) {
-		printf("ERROR on load file, fseek failed\n");
+		LOG_ERR("ERROR on load file, fseek failed\n");
 		return ERR;
 	}
 	int len = 0;
 	if ((len = ftell(fs)) == ERR) {
-		printf("ERROR on load file, ftell failed\n");
+		LOG_ERR("ERROR on load file, ftell failed\n");
 		return ERR;
 	}
-	printf("len: %d\n", len);
+	LOG_DBG("len: %d\n", len);
 	rewind(fs); /*from the manual: "The rewind() function returns no value."
 		      so there is no fucking way on doing error checking Dio Insetto
 		      i mean, i could check if fs position is NOT at start, but non ne ho voglia*/
 	(*out) = malloc(len + 1); // +1 for the '\0'[NULL] character
 	fread((*out), 1, len, fs);
 	(*out)[len] = '\0';
-	//PRINTF_DEBUG("file read: %s\n", (*out));
+	//LOG_DBG("file read: %s\n", (*out));
 	return NO_ERR;
 }
 
@@ -102,7 +114,7 @@ int load_file_nul_str(const char *path, char **out)
 dyn_array *da_alloc(size_t el_size)
 {
 	if (el_size == 0) {
-		printf("FATAL ERROR on dynamic array allocation, element size is 0\n");
+		LOG_ERR("FATAL ERROR on dynamic array allocation, element size is 0\n");
 		return NULL;
 	}
 	dyn_array *da = calloc(1, sizeof(dyn_array));
@@ -116,11 +128,11 @@ dyn_array *da_alloc(size_t el_size)
 int da_append(dyn_array *da, BYTE *new_el)
 {
 	if (da == NULL) {
-		printf("FATAL ERROR on dynamic array append, dynamic array pointer is NULL\n");
+		LOG_ERR("FATAL ERROR on dynamic array append, dynamic array pointer is NULL\n");
 		return ERR;
 	}
 	if (new_el == NULL) {
-		printf("FATAL ERROR on dynamic array append, new element pointer is NULL\n");
+		LOG_ERR("FATAL ERROR on dynamic array append, new element pointer is NULL\n");
 		return ERR;
 	}
 	if (da->count == da->capacity) {
@@ -146,11 +158,11 @@ int da_append(dyn_array *da, BYTE *new_el)
 int da_free(dyn_array *da)
 {
 	if (da == NULL) {
-		printf("FATAL ERROR on dynamic array free, dynamic array pointer is NULL\n");
+		LOG_ERR("FATAL ERROR on dynamic array free, dynamic array pointer is NULL\n");
 		return ERR;
 	}
 	if (da->data == NULL) {
-		printf("FATAL ERROR on dynamic array free, da data is NULL\n");
+		LOG_ERR("FATAL ERROR on dynamic array free, da data is NULL\n");
 		return ERR;
 	}
 	free(da->data);
@@ -174,13 +186,13 @@ int retrive_mac_addr(unsigned char mac_addr[MAC_ADDR_SIZE])
 	}
 	close(sock);
 	memcpy(mac_addr, ifr.ifr_hwaddr.sa_data, MAC_ADDR_SIZE);
-	printf("\tMAC address recovered from " MAC_IFACE ": ");
+	LOG_DBG("\tMAC address recovered from " MAC_IFACE ": ");
 	for (int i = 0; i < MAC_ADDR_SIZE; i++) {
-		printf("%.2X", mac_addr[i]);
+		LOG_DBG("%.2X", mac_addr[i]);
 		if (i != MAC_ADDR_SIZE - 1)
-			printf(":");
+			LOG_DBG(":");
 	}
-	printf("\n");
+	LOG_DBG("\n");
 	return NO_ERR;
 }
 

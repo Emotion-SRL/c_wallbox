@@ -24,17 +24,17 @@ static int protocol_callback(struct lws *wsi, enum lws_callback_reasons reason, 
 	case LWS_CALLBACK_CLIENT_WRITEABLE: {
 		const char *json = NULL;
 		if (client.on_boot) {
-			printf("\tsending boot notification...\n");
+			LOG_DBG("\tsending boot notification...\n");
 			json = json_make_message(m_boot);
 		} else {
 			json = json_make_message(m_status);
 		}
 		if (json == NULL) {
-			printf("\tjson_make_message returned NULL, skipping send\n");
+			LOG_ERR("\tjson_make_message returned NULL, skipping send\n");
 			break;
 		}
 		client.on_boot = false;
-		printf("%s\n", json);
+		LOG_DBG("%s\n", json);
 		int json_len = strlen(json);
 		unsigned char buf[LWS_SEND_BUFFER_PRE_PADDING + json_len + LWS_SEND_BUFFER_POST_PADDING/*this last one is fucking 0*/];
 		memcpy(buf + LWS_SEND_BUFFER_PRE_PADDING, json, json_len);

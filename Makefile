@@ -11,26 +11,27 @@ LIBS=-lwebsockets -lssl -lcrypto -ljson-c
 SRC=src/main.c src/utils.c src/serial.c src/ws.c src/server_cmd.c
 CLI_SRC=src/onion_cli/onion_cli.c src/serial.c src/utils.c
 COMPFLAGS=-Wall #-Wextra #-Wpedantic
+DEBUGFLAGS=-DDEBUG   # dev builds keep LOG_DBG traces; release leaves it out
 
 #stupid shit for stupid raycaster
 RAY_SRC=src/ray/main.c
 #end of stupid
 
 ws_client: $(SRC) $(CLI_SRC)
-	$(COMPILER) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS) $(STATIC_LIBS) $(COMPFLAGS) -g -Wno-deprecated-declarations
+	$(COMPILER) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS) $(STATIC_LIBS) $(COMPFLAGS) $(DEBUGFLAGS) -g -Wno-deprecated-declarations
 
 cli:
-	$(COMPILER) $(CFLAGS) -o onion_cli $(CLI_SRC) $(LDFLAGS) -ljson-c -Wno-deprecated-declarations
+	$(COMPILER) $(CFLAGS) -o onion_cli $(CLI_SRC) $(LDFLAGS) -ljson-c $(DEBUGFLAGS) -Wno-deprecated-declarations
 
 release: $(SRC)
 	$(COMPILER) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(STATIC_LIBS) $(COMPFLAGS) -O3
 
 wsc_dyn: $(SRC)
-	$(COMPILER) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS) $(COMPFLAGS)
+	$(COMPILER) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS) $(COMPFLAGS) $(DEBUGFLAGS)
 
 build_x86: $(SRC) $(CLI_SRC)
-	gcc -o $@.out $(SRC) $(LIBS) $(COMPFLAGS) -I/usr/include/json-c/ -fsanitize=address -g
-	gcc -o onion_cli $(CLI_SRC) -I/usr/include/json-c/ -ljson-c -fsanitize=address
+	gcc -o $@.out $(SRC) $(LIBS) $(COMPFLAGS) $(DEBUGFLAGS) -I/usr/include/json-c/ -fsanitize=address -g
+	gcc -o onion_cli $(CLI_SRC) -I/usr/include/json-c/ -ljson-c $(DEBUGFLAGS) -fsanitize=address
 
 clean:
 	rm ws_client wsc_dyn build_x86.out

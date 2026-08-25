@@ -53,11 +53,11 @@ int handle_server_command(struct lws *wsi, const char *payload, size_t len)
 			while (*amps == ' ')
 				amps++;
 			if (*amps == '\0') {
-				printf("\tset max amps without value, dropping\n");
+				LOG_ERR("\tset max amps without value, dropping\n");
 				return ERR;
 			}
 			char serial_buf[CMD_BUF_SIZE];
-			printf("Server command received: 'set max amps' value: '%s'\n", amps);
+			LOG_DBG("Server command received: 'set max amps' value: '%s'\n", amps);
 			snprintf(serial_buf, sizeof(serial_buf), "max amp %s", amps);
 			int rc = write_serial(serial_buf);
 			if (rc == NO_ERR) {
@@ -81,13 +81,13 @@ int handle_server_command(struct lws *wsi, const char *payload, size_t len)
 			value = NULL;
 	}
 	const char *cmd = buf;
-	printf("Server command received: '%s'", cmd);
+	LOG_DBG("Server command received: '%s'", cmd);
 	if (value != NULL)
-		printf(" value: '%s'", value);
-	printf("\n");
+		LOG_DBG(" value: '%s'", value);
+	LOG_DBG("\n");
 
 	if (strcmp(cmd, "status") == 0) {
-		printf("\tstatus request: scheduling writable to reply\n");
+		LOG_DBG("\tstatus request: scheduling writable to reply\n");
 		lws_callback_on_writable(wsi);
 		return NO_ERR;
 	}
@@ -98,12 +98,12 @@ int handle_server_command(struct lws *wsi, const char *payload, size_t len)
 		snprintf(serial_buf, sizeof(serial_buf), "stop");
 	} else if (strcmp(cmd, "setCurrent") == 0) {
 		if (value == NULL) {
-			printf("\tsetCurrent without value, dropping\n");
+			LOG_ERR("\tsetCurrent without value, dropping\n");
 			return ERR;
 		}
 		snprintf(serial_buf, sizeof(serial_buf), "max amp %s", value);
 	} else {
-		printf("\tunknown server command, dropping\n");
+		LOG_ERR("\tunknown server command, dropping\n");
 		return ERR;
 	}
 

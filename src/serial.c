@@ -28,10 +28,10 @@ static struct {
 
 int serial_init()
 {
-	printf("Microcontroller setup\n");
+	LOG_DBG("Microcontroller setup\n");
 	serial_com.fd = open("/dev/ttyS1", O_RDWR | O_NOCTTY);
 	if (serial_com.fd == -1) {
-		printf("\tfailed to open serial comunication\n");
+		LOG_ERR("\tfailed to open serial comunication\n");
 		return ERR;
 	}
 	tcgetattr(serial_com.fd, &serial_com.tty);
@@ -54,10 +54,14 @@ int serial_init()
 	serial_com.tty.c_cc[VTIME] = 50;
 
 	if((tcsetattr(serial_com.fd, TCSANOW, &serial_com.tty)) != 0) { /* Set the attributes to the termios structure */
-		printf("\tERROR! in Setting attributes");
+		LOG_ERR("\tERROR! in Setting attributes");
 		return ERR;
 	} else {
-		PRINTF_DEBUG("\tBaudRate = 9600\n\tStopBits = 1\n\tParity = none\n");
+		/* start from a clean line: drop anything the micro may have left in the
+		   RX/TX buffers while it was still booting, so the first status read is
+		   the reply to our request and not stale/partial bytes */
+		tcflush(serial_com.fd, TCIOFLUSH);
+		LOG_DBG("\tBaudRate = 9600\n\tStopBits = 1\n\tParity = none\n");
 		return NO_ERR;
 	}
 }
@@ -68,42 +72,42 @@ int serial_init()
  */
 int write_serial(char *write_buffer)
 {
-	printf("Writing on serial\n");
+	LOG_DBG("Writing on serial\n");
 	if (write_buffer == NULL) {
-		printf("\tFATAL ERROR on write serial, write buffer is NULL\n");
+		LOG_ERR("\tFATAL ERROR on write serial, write buffer is NULL\n");
 		return ERR;
 	}
 	if (serial_command_is_valid((char *)write_buffer) == CMD_NOTHING) {
-		printf("\tFATAL ERROR on write serial, write buffer is invalid\n");
+		LOG_ERR("\tFATAL ERROR on write serial, write buffer is invalid\n");
 		return ERR;
 	}
 	int bytes_written = 0;	/* Value for storing the number of bytes written to the port */
 	bytes_written = write(serial_com.fd, write_buffer, strlen(write_buffer));
 	if (bytes_written == -1) {
-		printf("\tError on write on serial port\n");
+		LOG_ERR("\tError on write on serial port\n");
 		close(serial_com.fd);
 		return ERR;
 	} else {
-		printf("\tBuffer written on serial, bytes written: %d\n", bytes_written);
+		LOG_DBG("\tBuffer written on serial, bytes written: %d\n", bytes_written);
 	}
 	/* the firmware reads with readStringUntil('\n') and does an exact match
 	   (command == "start"): terminate every command so reads don't merge */
 	if (write(serial_com.fd, "\n", 1) == -1) {
-		printf("\tError writing newline terminator on serial port\n");
+		LOG_ERR("\tError writing newline terminator on serial port\n");
 		close(serial_com.fd);
 		return ERR;
 	}
-	printf("+----------------------------------+\n\n");
+	LOG_DBG("+----------------------------------+\n\n");
 	return NO_ERR;
 }
 
 int read_serial(char **out_string)
 {
-	printf("Reading from serial\n");
+	LOG_DBG("Reading from serial\n");
 	// this specific malloc is just for testing
 	// BYTE *read_buffer = malloc(DEBUG_SERIAL_SIZE);
 	if (out_string == NULL) {
-		printf("\tFATAL ERROR on reading serial, out_string is NULL");
+		LOG_ERR("\tFATAL ERROR on reading serial, out_string is NULL");
 		return ERR;
 	}
 	char ch = 0;
@@ -111,13 +115,13 @@ int read_serial(char **out_string)
 	int bytes_read = 0;
 	while (1) {
 		if ((bytes_read = read(serial_com.fd, &ch, 1)) == -1) {
-			printf("\tERROR in read_serial, read failed\n");
+			LOG_ERR("\tERROR in read_serial, read failed\n");
 			return ERR;
 		}
 		if (bytes_read == 0) // this is fine, nothing to read
 			break;
 		if (ch == '\n') {
-			printf("\tDone reading, last byte whas %.2X, bytes_read is %d\n", ch, bytes_read);
+			LOG_DBG("\tDone reading, last byte whas %.2X, bytes_read is %d\n", ch, bytes_read);
 			fflush(stdout);
 			break;
 		}
@@ -128,8 +132,8 @@ int read_serial(char **out_string)
 	(*out_string)[buffer->count] = '\0';
 	DA_FREE_AND_NULL(buffer);
 	if (bytes_read != 0)
-		printf("read string: %s\n", *out_string);
-	printf("+----------------------------------+\n\n");
+		LOG_DBG("read string: %s\n", *out_string);
+	LOG_DBG("+----------------------------------+\n\n");
 	return NO_ERR;
 }
 
@@ -162,30 +166,34 @@ int serial_set_amp(int amp)
 	const int DIVISOR = 100;
 	amp /= DIVISOR;
 	if (amp < MIN_AMP || amp > MAX_AMP) {
-		printf("set amp error, ampere[%d] is invalid, opt to min[%d]\n", amp, MIN_AMP);
+		LOG_ERR("set amp error, ampere[%d] is invalid, opt to min[%d]\n", amp, MIN_AMP);
 		amp = MIN_AMP;
 	}
 
 	char command[BUFF_MAX_SIZE] = {0};
 	sprintf(command, "set amp %d%c", amp, '\0');
-	printf("command set amp generated is: %s\n", command);
+	LOG_DBG("command set amp generated is: %s\n", command);
 	return NO_ERR;
 }
 
 int serial_start()
 {
-	printf("sending START\n");
+	LOG_DBG("sending START\n");
 	return NO_ERR;
 }
 
 int serial_stop()
 {
-	printf("sending STOP\n");
+	LOG_DBG("sending STOP\n");
 	return NO_ERR;
 }
 
 int serial_status(char **status)
 {
+	/* flush stale input first: right after a cold boot the micro may not answer
+	   yet, and a leftover/partial line would desync every following read (we'd
+	   keep reading old lines one request behind, never the fresh reply) */
+	tcflush(serial_com.fd, TCIFLUSH);
 	if (write_serial((char *)cmds.status) == ERR)
 		return ERR;
 	if (status == NULL) {
