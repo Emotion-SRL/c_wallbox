@@ -12,8 +12,8 @@
 #   7. cron job for the executable auto-update
 #   8. first download of the binary via update_wallbox.sh, then start it
 #
-# NOTE: the binary is always fetched from the public GitHub release ($BIN_URL), both the
-#       first time (step 8) and on later updates (cron -> update_wallbox.sh). No scp, no token.
+# NOTE: the binary is always fetched from the public GitHub release, both the first time
+#       (step 8) and on later updates (cron -> update_wallbox.sh). No scp, no token.
 
 set -u
 
@@ -43,11 +43,11 @@ BOOT_DELAY=60
 WATCHDOG_MIN_UPTIME=$((BOOT_DELAY + 30))
 
 # GitHub PUBLIC release config for the binary download/auto-update.
-# The repo is public, so no token is needed: the 'releases/latest/download/<asset>'
-# URL is a stable redirect to the newest release's asset, downloadable anonymously.
+# The repo is public, so no token is needed. We do NOT hardcode the asset file name:
+# update_wallbox.sh queries the API anonymously and takes the first asset's download URL,
+# so it keeps working whatever the asset is called (e.g. 'release', 'ws_client', ...).
 GH_OWNER="Emotion-SRL"
 GH_REPO="c_wallbox"
-BIN_URL="https://github.com/$GH_OWNER/$GH_REPO/releases/latest/download/$BIN_NAME"
 
 # Serial provisioning APIs (unchanged from the old script)
 API_LOGIN="https://emotion-projects.eu/api/auth/login/"
@@ -195,15 +195,20 @@ BIN_NAME="$BIN_NAME"
 TMP_BIN="\$WB_DIR/\$BIN_NAME.new"
 LOG="\$WB_DIR/update.log"
 
-# GitHub public release: stable redirect to the latest release asset, no token/API needed
-BIN_URL="$BIN_URL"
+# GitHub public repo: query the API anonymously (no token) and take the first asset's
+# direct download URL. Name-agnostic: works whatever the asset file is called.
+GH_OWNER="$GH_OWNER"
+GH_REPO="$GH_REPO"
+API="https://api.github.com/repos/\$GH_OWNER/\$GH_REPO/releases/latest"
+
+BIN_URL=\$(curl -fsSL "\$API" | grep -o 'https://github.com/[^"]*/releases/download/[^"]*' | head -1)
 
 if [ -z "\$BIN_URL" ]; then
-    echo "\$(date) BIN_URL not set, skipping update" >> "\$LOG"
+    echo "\$(date) no release asset found" >> "\$LOG"
     exit 1
 fi
 
-# download the binary (-L follows the releases/latest/download -> asset redirect)
+# download the binary (-L follows the release-asset redirect)
 if ! curl -fsSL "\$BIN_URL" -o "\$TMP_BIN"; then
     echo "\$(date) download failed" >> "\$LOG"
     rm -f "\$TMP_BIN"
@@ -351,8 +356,8 @@ fi
 echo ""
 echo "============================================================"
 echo "Provisioning done."
-if [ -z "$BIN_URL" ]; then
-    echo "  WARNING: BIN_URL is empty, the binary was NOT downloaded."
+if [ -z "$GH_OWNER" ] || [ -z "$GH_REPO" ]; then
+    echo "  WARNING: GH_OWNER/GH_REPO empty, the binary was NOT downloaded."
     echo "  Fill GH_OWNER/GH_REPO at the top of this script and re-run,"
     echo "  or run $UPDATE_SCRIPT manually after fixing it."
 else
