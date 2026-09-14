@@ -12,8 +12,8 @@
 #   7. cron job for the executable auto-update
 #   8. first download of the binary via update_wallbox.sh, then start it
 #
-# NOTE: the binary is always fetched from GitHub ($BIN_URL), both the first time
-#       (step 8) and on later updates (cron -> update_wallbox.sh). No scp needed.
+# NOTE: the binary is always fetched from the public GitHub release ($BIN_URL), both the
+#       first time (step 8) and on later updates (cron -> update_wallbox.sh). No scp, no token.
 
 set -u
 
@@ -42,12 +42,12 @@ BOOT_DELAY=60
 # the watchdog only ever acts as a crash-recovery net afterwards.
 WATCHDOG_MIN_UPTIME=$((BOOT_DELAY + 30))
 
-# GitHub private release config for the binary download/auto-update.
-# TO BE FILLED: owner/repo from the release asset link, token created on GitHub.
-# GH_TOKEN is a Personal Access Token (classic) with the 'repo' scope.
+# GitHub PUBLIC release config for the binary download/auto-update.
+# The repo is public, so no token is needed: the 'releases/latest/download/<asset>'
+# URL is a stable redirect to the newest release's asset, downloadable anonymously.
 GH_OWNER="Emotion-SRL"
 GH_REPO="c_wallbox"
-GH_TOKEN="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"          # GitHub Personal Access Token, ghp_... (fill on the Onion)
+BIN_URL="https://github.com/$GH_OWNER/$GH_REPO/releases/latest/download/$BIN_NAME"
 
 # Serial provisioning APIs (unchanged from the old script)
 API_LOGIN="https://emotion-projects.eu/api/auth/login/"
@@ -195,28 +195,16 @@ BIN_NAME="$BIN_NAME"
 TMP_BIN="\$WB_DIR/\$BIN_NAME.new"
 LOG="\$WB_DIR/update.log"
 
-# GitHub private release config
-GH_OWNER="$GH_OWNER"
-GH_REPO="$GH_REPO"
-GH_TOKEN="$GH_TOKEN"
+# GitHub public release: stable redirect to the latest release asset, no token/API needed
+BIN_URL="$BIN_URL"
 
-if [ -z "\$GH_OWNER" ] || [ -z "\$GH_REPO" ] || [ -z "\$GH_TOKEN" ]; then
-    echo "\$(date) GitHub config not set, skipping update" >> "\$LOG"
+if [ -z "\$BIN_URL" ]; then
+    echo "\$(date) BIN_URL not set, skipping update" >> "\$LOG"
     exit 1
 fi
 
-API="https://api.github.com/repos/\$GH_OWNER/\$GH_REPO/releases/latest"
-
-# asset API url of the latest release (assumes the binary is the only asset)
-ASSET_URL=\$(curl -fsSL -H "Authorization: token \$GH_TOKEN" -H "Accept: application/vnd.github+json" "\$API" | grep -o 'https://api.github.com/repos/[^"]*/releases/assets/[0-9]*' | head -1)
-
-if [ -z "\$ASSET_URL" ]; then
-    echo "\$(date) no release asset found" >> "\$LOG"
-    exit 1
-fi
-
-# download the asset (octet-stream is required for private release assets)
-if ! curl -fsSL -H "Authorization: token \$GH_TOKEN" -H "Accept: application/octet-stream" "\$ASSET_URL" -o "\$TMP_BIN"; then
+# download the binary (-L follows the releases/latest/download -> asset redirect)
+if ! curl -fsSL "\$BIN_URL" -o "\$TMP_BIN"; then
     echo "\$(date) download failed" >> "\$LOG"
     rm -f "\$TMP_BIN"
     exit 1
@@ -363,10 +351,10 @@ fi
 echo ""
 echo "============================================================"
 echo "Provisioning done."
-if [ -z "$GH_OWNER" ] || [ -z "$GH_REPO" ] || [ -z "$GH_TOKEN" ]; then
-    echo "  WARNING: GitHub config is empty, the binary was NOT downloaded."
-    echo "  Fill GH_OWNER/GH_REPO/GH_TOKEN at the top of this script and re-run,"
-    echo "  or run $UPDATE_SCRIPT manually after filling them in it."
+if [ -z "$BIN_URL" ]; then
+    echo "  WARNING: BIN_URL is empty, the binary was NOT downloaded."
+    echo "  Fill GH_OWNER/GH_REPO at the top of this script and re-run,"
+    echo "  or run $UPDATE_SCRIPT manually after fixing it."
 else
     echo "  Binary at: $BIN_PATH"
 fi
