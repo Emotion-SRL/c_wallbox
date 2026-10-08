@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configura WiFi</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1d2330; --muted: #6b7385;
+    --line: #e3e6ec; --accent: #2f5bd8; --accent-text: #fff;
+    --ok: #1a7f4b; --err: #b3261e; --field: #f7f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c; --card: #1b2029; --text: #e8ebf2; --muted: #98a1b3;
+      --line: #2b3240; --accent: #6f93ff; --accent-text: #0b1020;
+      --ok: #55d08c; --err: #ff8a80; --field: #141922;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 440px; margin: 0 auto; padding: 20px 16px 32px; }
+  h1 { font-size: 1.4rem; margin: 4px 0 18px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px; margin-bottom: 14px;
+  }
+  .label { color: var(--muted); font-size: .85rem; }
+  .current { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.1rem; word-break: break-all; }
+  .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--ok); }
+  label.f { display: block; font-size: .9rem; color: var(--muted); margin: 14px 0 6px; }
+  label.f:first-of-type { margin-top: 0; }
+  input[type=text], input[type=password], select {
+    width: 100%; font: inherit; padding: 13px 14px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--field); color: var(--text);
+  }
+  input:focus, select:focus, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  .pw { position: relative; }
+  .pw input { padding-right: 82px; }
+  .pw button {
+    position: absolute; right: 6px; top: 6px; bottom: 6px; padding: 0 12px;
+    border: 0; background: none; color: var(--accent); font-weight: 600;
+  }
+  button {
+    font: inherit; cursor: pointer; border-radius: 10px; padding: 12px 16px;
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+  }
+  button.primary {
+    width: 100%; margin-top: 18px; padding: 14px; font-weight: 600; font-size: 1.05rem;
+    background: var(--accent); color: var(--accent-text); border-color: var(--accent);
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+  summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "▾"; color: var(--muted); }
+  details[open] > summary::after { content: "▴"; }
+  .sub { margin-top: 12px; }
+  ul { list-style: none; margin: 8px 0 0; padding: 0; }
+  li button.net {
+    width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    text-align: left; border: 0; border-top: 1px solid var(--line); border-radius: 0;
+    background: none; padding: 12px 2px;
+  }
+  li:first-child button.net { border-top: 0; }
+  .net .n { word-break: break-all; }
+  .meta { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .small { padding: 8px 12px; font-size: .9rem; }
+  .note { color: var(--muted); font-size: .9rem; margin-top: 10px; }
+  .msg-ok { color: var(--ok); } .msg-err { color: var(--err); }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
+          border-top-color: var(--accent); border-radius: 50%; animation: r .8s linear infinite;
+          vertical-align: -2px; margin-right: 8px; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  footer { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 8px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Configura WiFi</h1>
+
+  <section class="card" aria-live="polite">
+    <div class="label">Rete attuale</div>
+    <div class="current"><span class="dot" id="dot"></span><span id="cur-name">…</span></div>
+    <div class="label" id="cur-ip"></div>
+  </section>
+
+  <section class="card" id="form-card">
+    <form id="form" autocomplete="off" novalidate>
+      <label class="f" for="ssid">Nome della rete</label>
+      <input type="text" id="ssid" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Nome esatto della rete WiFi">
+
+      <div id="pw-wrap">
+        <label class="f" for="pw">Password</label>
+        <div class="pw">
+          <input type="password" id="pw" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <button type="button" id="toggle">Mostra</button>
+        </div>
+      </div>
+
+      <div id="form-err" class="note msg-err" role="alert" hidden></div>
+      <button type="submit" class="primary" id="join">Collega</button>
+    </form>
+
+    <details id="adv">
+      <summary>Opzioni avanzate</summary>
+      <div class="sub">
+        <label class="f" for="enc">Sicurezza della rete</label>
+        <select id="enc">
+          <option value="psk2">WPA2 (la più comune)</option>
+          <option value="psk">WPA</option>
+          <option value="wep">WEP</option>
+          <option value="none">Nessuna (rete aperta)</option>
+        </select>
+      </div>
+    </details>
+
+    <details id="scan-box">
+      <summary>Scegli tra le reti trovate</summary>
+      <div class="sub">
+        <div class="row">
+          <span class="label" id="scan-state"></span>
+          <button type="button" class="small" id="rescan">Aggiorna</button>
+        </div>
+        <ul id="nets"></ul>
+      </div>
+    </details>
+  </section>
+
+  <section class="card" id="status-card" hidden aria-live="polite">
+    <strong id="st-title"></strong>
+    <div id="st-body" class="note"></div>
+    <button type="button" id="st-back" style="margin-top:14px" hidden>Indietro</button>
+  </section>
+
+  <footer>
+    Se perdi la connessione, collegati alla rete <strong>Omega-3932</strong><br>
+    e apri <strong>192.168.3.1/wifi/</strong>
+  </footer>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var CGI = '/cgi-bin/wifi-setup';
+  var $ = function (id) { return document.getElementById(id); };
+  var target = null;      // ssid we are trying to join
+  var pollTimer = null;
+  var scanned = {};       // ssid -> encryption, filled by the (optional) scan
+  var scanDone = false;
+
+  // UTF-8 safe base64
+  function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
+  function show(id, on) { $(id).hidden = !on; }
+
+  function api(query, opts) {
+    return fetch(CGI + '?' + query, opts).then(function (r) { return r.json(); });
+  }
+
+  function loadInfo() {
+    return api('action=info').then(function (i) {
+      $('cur-name').textContent = i.ssid || 'non collegato';
+      $('dot').className = 'dot' + (i.connected ? ' on' : '');
+      $('cur-ip').textContent = i.connected ? 'Indirizzo: ' + i.ip : '';
+    }).catch(function () { $('cur-name').textContent = 'non disponibile'; });
+  }
+
+  /// form ///
+
+  function syncEnc() { show('pw-wrap', $('enc').value !== 'none'); }
+
+  function formError(t) { $('form-err').textContent = t; show('form-err', true); }
+
+  // If the typed name matches a scanned network, trust its security type.
+  function autoEnc() {
+    var e = scanned[$('ssid').value];
+    if (e) { $('enc').value = e; syncEnc(); }
+  }
+
+  function setStatus(title, body, cls, back) {
+    $('st-title').textContent = title;
+    $('st-title').className = cls || '';
+    $('st-body').innerHTML = body;
+    show('st-back', !!back);
+    show('status-card', true);
+  }
+
+  function join() {
+    var ssid = $('ssid').value, enc = $('enc').value, pw = $('pw').value;
+    show('form-err', false);
+    if (!ssid) { $('ssid').focus(); return formError('Scrivi il nome della rete.'); }
+    if (new TextEncoder().encode(ssid).length > 32) return formError('Il nome della rete è troppo lungo.');
+    if (enc === 'psk2' || enc === 'psk') {
+      if (pw.length < 8) { $('pw').focus(); return formError('La password deve avere almeno 8 caratteri.'); }
+      if (pw.length > 63) return formError('La password può avere al massimo 63 caratteri.');
+    }
+    if (enc === 'wep' && pw.length !== 5 && pw.length !== 13) {
+      return formError('La password WEP deve avere 5 o 13 caratteri.');
+    }
+    target = ssid;
+    show('form-card', false);
+    setStatus('Collegamento a "' + ssid + '"…',
+      '<span class="spin"></span>Operazione in corso. Per qualche secondo la connessione a questa pagina potrebbe interrompersi: è normale.<br><br>' +
+      'Se succede, ricollegati alla rete <strong>Omega-3932</strong> e riapri questa pagina.', '', false);
+
+    fetch(CGI + '?action=join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ssid: b64(ssid), password: b64(enc === 'none' ? '' : pw), enc: enc })
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (!r.ok) {
+        var msgs = { busy: 'Un altro cambio è già in corso, riprova tra poco.',
+                     password_length: 'La password non ha una lunghezza valida.' };
+        return fail(msgs[r.error] || 'Impossibile salvare la rete (' + r.error + ').');
+      }
+      waitConnected(Date.now());
+    }).catch(function () {
+      // the request may die because the AP restarted: keep polling anyway
+      waitConnected(Date.now());
+    });
+  }
+
+  function fail(text) {
+    clearTimeout(pollTimer);
+    setStatus('Non riuscito', text, 'msg-err', true);
+  }
+
+  function waitConnected(t0) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(function () {
+      api('action=info').then(function (i) {
+        if (i.connected && i.ssid === target) {
+          setStatus('Collegato a "' + target + '"',
+            'Indirizzo ottenuto: <strong>' + i.ip + '</strong>', 'msg-ok', true);
+          loadInfo();
+          return;
+        }
+        throw 0;
+      }).catch(function () {
+        if (Date.now() - t0 > 90000) {
+          fail('Non riesco a collegarmi a "' + target + '". Controlla nome e password e che la rete sia a portata, poi riprova. ' +
+               'Se non vedi più questa pagina, ricollegati a <strong>Omega-3932</strong>.');
+        } else {
+          waitConnected(t0);
+        }
+      });
+    }, 3000);
+  }
+
+  /// optional scan ///
+
+  function signalLabel(rssi) {
+    var n = parseInt(rssi, 10);
+    if (isNaN(n)) return '';
+    if (n >= -60) return 'ottimo';
+    if (n >= -75) return 'buono';
+    return 'debole';
+  }
+
+  function pick(ssid, enc) {
+    $('ssid').value = ssid;
+    $('enc').value = enc;
+    syncEnc();
+    $('scan-box').open = false;
+    $('ssid').scrollIntoView({ block: 'center' });
+    (enc === 'none' ? $('join') : $('pw')).focus();
+  }
+
+  // The scan is only a convenience: the device sometimes answers with an empty body,
+  // so retry quietly a couple of times and then point the user to manual entry.
+  function scan(attempt) {
+    $('scan-state').innerHTML = '<span class="spin"></span>Ricerca in corso…';
+    $('rescan').disabled = true;
+    $('nets').innerHTML = '';
+    api('action=scan').then(function (d) {
+      // keep the strongest entry per ssid, skip hidden ones
+      var best = {};
+      (d.results || []).forEach(function (n) {
+        if (!n.ssid) return;
+        if (!best[n.ssid] || parseInt(n.rssi, 10) > parseInt(best[n.ssid].rssi, 10)) best[n.ssid] = n;
+      });
+      var list = Object.keys(best).map(function (k) { return best[k]; })
+        .sort(function (a, b) { return parseInt(b.rssi, 10) - parseInt(a.rssi, 10); });
+      scanned = {};
+      if (!list.length) {
+        $('scan-state').textContent = 'Nessuna rete trovata.';
+        return;
+      }
+      $('scan-state').textContent = list.length + ' reti';
+      list.forEach(function (n) {
+        var enc = ['psk2', 'psk', 'wep', 'none'].indexOf(n.encryption) >= 0 ? n.encryption : 'psk2';
+        scanned[n.ssid] = enc;
+        var li = document.createElement('li');
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'net';
+        var name = document.createElement('span'); name.className = 'n'; name.textContent = n.ssid;
+        var meta = document.createElement('span'); meta.className = 'meta';
+        meta.textContent = (enc === 'none' ? 'aperta' : 'protetta') + ' · ' + signalLabel(n.rssi);
+        b.appendChild(name); b.appendChild(meta);
+        b.addEventListener('click', function () { pick(n.ssid, enc); });
+        li.appendChild(b); $('nets').appendChild(li);
+      });
+      scanDone = true;
+    }).catch(function () {
+      if (attempt < 2) return scan(attempt + 1);
+      $('scan-state').textContent = 'Non riesco a elencare le reti: scrivi il nome a mano.';
+    }).then(function () { $('rescan').disabled = false; });
+  }
+
+  /// wiring ///
+
+  $('form').addEventListener('submit', function (e) { e.preventDefault(); join(); });
+  $('enc').addEventListener('change', syncEnc);
+  $('ssid').addEventListener('change', autoEnc);
+  $('toggle').addEventListener('click', function () {
+    var hidden = $('pw').type === 'password';
+    $('pw').type = hidden ? 'text' : 'password';
+    this.textContent = hidden ? 'Nascondi' : 'Mostra';
+  });
+  $('scan-box').addEventListener('toggle', function () {
+    if (this.open && !scanDone) scan(0);
+  });
+  $('rescan').addEventListener('click', function () { scan(0); });
+  $('st-back').addEventListener('click', function () {
+    show('status-card', false); show('form-card', true);
+    loadInfo();
+  });
+
+  syncEnc();
+  loadInfo();
+})();
+</script>
+</body>
+</html>
