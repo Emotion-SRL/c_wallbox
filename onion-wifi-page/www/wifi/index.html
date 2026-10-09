@@ -163,10 +163,10 @@
   var scanDone = false;
   var cur = '';           // network the Omega was on when this page last read it
   var ap = { ssid: 'Omega-3932', ip: '192.168.3.1' };  // the Omega's own access point, refreshed by loadInfo
-  var lastContact = 0;    // last time the Omega answered while waiting for the new network
+  var tStart = 0;         // when the user asked for the change
   var lostShown = false;
   var WAIT_MS = 90000;    // how long to wait for the new network
-  var LOST_MS = 15000;    // silence after which the Omega has probably left the network this page goes through
+  var LOST_MS = 30000;    // no answer this long after the request: tell the user to check, keep polling
 
   // UTF-8 safe base64
   function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
@@ -244,12 +244,12 @@
         (cur ? 'la rete <strong>' + esc(cur) + '</strong>' : 'la rete a cui è collegato l\'Omega') +
         ': quando l\'Omega passerà alla nuova rete, da qui potresti non raggiungerlo più. È normale.'), '', false);
 
-    lastContact = Date.now();
-    fetch(CGI + '?action=join', {
+    tStart = Date.now();
+    api('action=join', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ssid: b64(ssid), password: b64(enc === 'none' ? '' : pw), enc: enc })
-    }).then(function (r) { return r.json(); }).then(function (r) {
+    }, 15000).then(function (r) {
       if (!r.ok) {
         var msgs = { busy: 'Un altro cambio è già in corso, riprova tra poco.',
                      password_length: 'La password non ha una lunghezza valida.' };
@@ -257,7 +257,7 @@
       }
       waitConnected(Date.now(), WAIT_MS);
     }).catch(function () {
-      // the request may die because the AP restarted: keep polling anyway
+      // the request may die or time out because the AP restarted or the Omega left: keep polling anyway
       waitConnected(Date.now(), WAIT_MS);
     });
   }
@@ -275,7 +275,8 @@
     var body = viaAp()
       ? 'Questa pagina non riceve più risposta dall\'Omega. Di solito succede perché, mentre la rete si riavviava, ' +
         'questo telefono o PC si è collegato a un\'altra WiFi.<br><br>' +
-        'Ricollegati alla rete <strong>' + esc(ap.ssid) + '</strong> e premi «Controlla di nuovo».'
+        'Ricollegati alla rete <strong>' + esc(ap.ssid) + '</strong>' +
+        (stillTrying ? ': questa pagina se ne accorge da sola.' : ' e premi «Controlla di nuovo».')
       : 'L\'Omega si sta spostando sulla rete <strong>' + esc(target) + '</strong>: da qui non è più raggiungibile, ' +
         'quindi questa pagina non può confermare il collegamento. Probabilmente è tutto a posto. Per controllare:' +
         '<ul class="steps"><li>collega questo telefono o PC a <strong>' + esc(target) + '</strong> e apri il nuovo ' +
@@ -291,7 +292,6 @@
     clearTimeout(pollTimer);
     pollTimer = setTimeout(function () {
       api('action=info', null, 5000).then(function (i) {
-        lastContact = Date.now();
         if (i.connected && i.ssid === target) {
           setStatus('Collegato a "' + target + '"',
             'Indirizzo ottenuto: <strong>' + esc(i.ip) + '</strong>', 'msg-ok', true);
@@ -305,7 +305,7 @@
       }, function () {
         // No answer: the AP is restarting, or the Omega has left the network this page goes through.
         if (Date.now() - t0 > limit) return lost(false);
-        if (!lostShown && !viaAp() && target !== cur && Date.now() - lastContact > LOST_MS) lost(true);
+        if (!lostShown && Date.now() - tStart > LOST_MS) lost(true);
         waitConnected(t0, limit);
       });
     }, 3000);
@@ -386,8 +386,8 @@
   });
   $('rescan').addEventListener('click', function () { scan(0); });
   $('st-retry').addEventListener('click', function () {
-    lostShown = false;
-    lastContact = Date.now();
+    lostShown = true;   // a short manual check: no intermediate message
+    tStart = Date.now();
     setStatus('Controllo in corso…', '<span class="spin"></span>Cerco l\'Omega…', '', false);
     waitConnected(Date.now(), 15000);
   });
