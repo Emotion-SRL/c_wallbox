@@ -47,16 +47,15 @@ Per leggere i sorgenti originali di OnionOS: i file
 | CGI | `/www/cgi-bin/wifi-setup` (755) |
 | Home → pagina WiFi | `/www/index.html` (prima rimandava a `/OnionOS`, che resta raggiungibile a mano) |
 | Originale di `/www/index.html` | `/root/index.html.onionos` |
-| Backup pre-modifica di `/www` e `/etc/config` | `/root/backup-pre-wifipage-20261008-163149.tar.gz` |
-| Chiave RSA di Carlo | riga in `/etc/dropbear/authorized_keys` |
+| Chiave RSA di Carlo | unica riga in `/etc/dropbear/authorized_keys` |
 
-`authorized_keys` contiene **righe duplicate** (chiave di Francesco e una
-ed25519 di Carlo, inutile su questo Dropbear): si possono ripulire. La chiave di
-Francesco non è stata toccata.
+Pulizia del 2026-10-09: da `authorized_keys` sono state tolte le righe doppie e
+le chiavi ed25519 (inutili su questo Dropbear); resta solo la RSA di Carlo.
+Cancellato anche il backup `/root/backup-pre-wifipage-20261008-163149.tar.gz`
+(conteneva `/etc/config` con le password WiFi).
 
-La configurazione WiFi salvata è stata modificata dai test fatti usando la
-pagina: oggi contiene `EmotionWiFi` (priorità massima) e `A16 di Carlo Maria`
-(rete di prova). Vedi `uci show wireless | grep wifi-config`.
+Reti WiFi salvate oggi: solo `EmotionWiFi`. Per vederle senza stampare le
+password: `uci show wireless | grep -E "=wifi-config$|@wifi-config.*\.ssid="`.
 
 ## 4. Come funziona (importante per modificarla)
 
@@ -177,7 +176,6 @@ Non è bloccante: la pagina funziona anche senza scansione.
   `1` su tutte le interfacce, quindi l'Omega non risponderebbe per `.4` sul
   lato ufficio. Va verificato che nessun altro dispositivo usi `.4`, e provato
   da un telefono collegato all'AP.
-- Pulizia delle righe duplicate in `authorized_keys`.
 
 ## 8. Come tornare indietro
 
@@ -185,12 +183,10 @@ Non è bloccante: la pagina funziona anche senza scansione.
 # sul dispositivo
 rm -rf /www/wifi /www/cgi-bin/wifi-setup
 cp /root/index.html.onionos /www/index.html     # la home torna a OnionOS
-# ripristino completo di /www e /etc/config dal backup (sovrascrive tutto!)
-tar xzf /root/backup-pre-wifipage-20261008-163149.tar.gz -C /
 ```
 
-Il ripristino riporta anche `/etc/config` allo stato di prima dei test, quindi
-cancella le reti WiFi salvate dopo. Usarlo con la rete giusta già a portata.
+Il backup completo di `/www` e `/etc/config` fatto prima della pagina è stato
+cancellato: non c'è più un ripristino "tutto com'era".
 
 ## 9. Comandi utili
 
@@ -204,4 +200,5 @@ curl -s "http://<ip>/cgi-bin/wifi-setup?action=info"
 ```
 
 `uci show wireless` stampa le password WiFi in chiaro: non incollarlo in chat o
-ticket senza oscurarle.
+ticket senza oscurarle. Lo stesso vale per `ps`: `ap_client` riceve nomi **e
+password** delle reti come argomenti.
