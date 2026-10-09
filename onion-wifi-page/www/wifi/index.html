@@ -8,13 +8,13 @@
   :root {
     --bg: #f4f5f7; --card: #fff; --text: #1d2330; --muted: #6b7385;
     --line: #e3e6ec; --accent: #2f5bd8; --accent-text: #fff;
-    --ok: #1a7f4b; --err: #b3261e; --field: #f7f8fa;
+    --ok: #1a7f4b; --err: #b3261e; --warn: #8a5a00; --field: #f7f8fa;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12151c; --card: #1b2029; --text: #e8ebf2; --muted: #98a1b3;
       --line: #2b3240; --accent: #6f93ff; --accent-text: #0b1020;
-      --ok: #55d08c; --err: #ff8a80; --field: #141922;
+      --ok: #55d08c; --err: #ff8a80; --warn: #f0b44c; --field: #141922;
     }
   }
   * { box-sizing: border-box; }
@@ -75,7 +75,10 @@
   .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .small { padding: 8px 12px; font-size: .9rem; }
   .note { color: var(--muted); font-size: .9rem; margin-top: 10px; }
-  .msg-ok { color: var(--ok); } .msg-err { color: var(--err); }
+  .msg-ok { color: var(--ok); } .msg-err { color: var(--err); } .msg-warn { color: var(--warn); }
+  ul.steps { list-style: disc; margin: 8px 0 0; padding-left: 20px; }
+  ul.steps li { margin-top: 6px; }
+  .note a { color: var(--accent); }
   .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
           border-top-color: var(--accent); border-radius: 50%; animation: r .8s linear infinite;
           vertical-align: -2px; margin-right: 8px; }
@@ -139,12 +142,13 @@
   <section class="card" id="status-card" hidden aria-live="polite">
     <strong id="st-title"></strong>
     <div id="st-body" class="note"></div>
+    <button type="button" id="st-retry" style="margin-top:14px" hidden>Controlla di nuovo</button>
     <button type="button" id="st-back" style="margin-top:14px" hidden>Indietro</button>
   </section>
 
   <footer>
-    Se perdi la connessione, collegati alla rete <strong>Omega-3932</strong><br>
-    e apri <strong>192.168.3.1/wifi/</strong>
+    Se perdi la connessione, collegati alla rete <strong id="ft-ssid">Omega-3932</strong><br>
+    e apri <strong><span id="ft-ip">192.168.3.1</span>/wifi/</strong>
   </footer>
 </main>
 
@@ -157,17 +161,40 @@
   var pollTimer = null;
   var scanned = {};       // ssid -> encryption, filled by the (optional) scan
   var scanDone = false;
+  var cur = '';           // network the Omega was on when this page last read it
+  var ap = { ssid: 'Omega-3932', ip: '192.168.3.1' };  // the Omega's own access point, refreshed by loadInfo
+  var lastContact = 0;    // last time the Omega answered while waiting for the new network
+  var lostShown = false;
+  var WAIT_MS = 90000;    // how long to wait for the new network
+  var LOST_MS = 15000;    // silence after which the Omega has probably left the network this page goes through
 
   // UTF-8 safe base64
   function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
   function show(id, on) { $(id).hidden = !on; }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
 
-  function api(query, opts) {
+  // ms: give up after this long; an Omega that has left the network can leave a request hanging
+  function api(query, opts, ms) {
+    opts = opts || {};
+    if (ms && window.AbortController) {
+      var ctl = new AbortController();
+      opts.signal = ctl.signal;
+      setTimeout(function () { ctl.abort(); }, ms);
+    }
     return fetch(CGI + '?' + query, opts).then(function (r) { return r.json(); });
   }
 
+  // Opened through the Omega's own access point? Otherwise the page goes through the network
+  // the Omega is a client of, and changing that network takes the page's connection away.
+  function viaAp() { return location.hostname === ap.ip; }
+
   function loadInfo() {
     return api('action=info').then(function (i) {
+      cur = i.ssid || '';
+      if (i.ap_ssid) ap.ssid = i.ap_ssid;
+      if (i.ap_ip) ap.ip = i.ap_ip;
+      $('ft-ssid').textContent = ap.ssid;
+      $('ft-ip').textContent = ap.ip;
       $('cur-name').textContent = i.ssid || 'non collegato';
       $('dot').className = 'dot' + (i.connected ? ' on' : '');
       $('cur-ip').textContent = i.connected ? 'Indirizzo: ' + i.ip : '';
@@ -191,6 +218,7 @@
     $('st-title').className = cls || '';
     $('st-body').innerHTML = body;
     show('st-back', !!back);
+    show('st-retry', false);
     show('status-card', true);
   }
 
@@ -207,11 +235,16 @@
       return formError('La password WEP deve avere 5 o 13 caratteri.');
     }
     target = ssid;
+    lostShown = false;
     show('form-card', false);
-    setStatus('Collegamento a "' + ssid + '"…',
-      '<span class="spin"></span>Operazione in corso. Per qualche secondo la connessione a questa pagina potrebbe interrompersi: è normale.<br><br>' +
-      'Se succede, ricollegati alla rete <strong>Omega-3932</strong> e riapri questa pagina.', '', false);
+    setStatus('Collegamento a "' + ssid + '"…', '<span class="spin"></span>Operazione in corso. ' + (viaAp()
+      ? 'Per qualche secondo la connessione a questa pagina potrebbe interrompersi: è normale.<br><br>' +
+        'Se succede, ricollegati alla rete <strong>' + esc(ap.ssid) + '</strong> e riapri questa pagina.'
+      : 'Stai usando questa pagina attraverso ' +
+        (cur ? 'la rete <strong>' + esc(cur) + '</strong>' : 'la rete a cui è collegato l\'Omega') +
+        ': quando l\'Omega passerà alla nuova rete, da qui potresti non raggiungerlo più. È normale.'), '', false);
 
+    lastContact = Date.now();
     fetch(CGI + '?action=join', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -222,10 +255,10 @@
                      password_length: 'La password non ha una lunghezza valida.' };
         return fail(msgs[r.error] || 'Impossibile salvare la rete (' + r.error + ').');
       }
-      waitConnected(Date.now());
+      waitConnected(Date.now(), WAIT_MS);
     }).catch(function () {
       // the request may die because the AP restarted: keep polling anyway
-      waitConnected(Date.now());
+      waitConnected(Date.now(), WAIT_MS);
     });
   }
 
@@ -234,24 +267,46 @@
     setStatus('Non riuscito', text, 'msg-err', true);
   }
 
-  function waitConnected(t0) {
+  // Not an error: the page can no longer reach the Omega, so it cannot confirm the change.
+  // Say why and where to check. stillTrying: polling goes on in the background.
+  function lost(stillTrying) {
+    lostShown = true;
+    var apLink = '<a href="http://' + esc(ap.ip) + '/wifi/">' + esc(ap.ip) + '/wifi/</a>';
+    var body = viaAp()
+      ? 'Questa pagina non riceve più risposta dall\'Omega. Di solito succede perché, mentre la rete si riavviava, ' +
+        'questo telefono o PC si è collegato a un\'altra WiFi.<br><br>' +
+        'Ricollegati alla rete <strong>' + esc(ap.ssid) + '</strong> e premi «Controlla di nuovo».'
+      : 'L\'Omega si sta spostando sulla rete <strong>' + esc(target) + '</strong>: da qui non è più raggiungibile, ' +
+        'quindi questa pagina non può confermare il collegamento. Probabilmente è tutto a posto. Per controllare:' +
+        '<ul class="steps"><li>collega questo telefono o PC a <strong>' + esc(target) + '</strong> e apri il nuovo ' +
+        'indirizzo dell\'Omega (lo trovi tra i dispositivi collegati al router), oppure</li>' +
+        '<li>collegati alla rete <strong>' + esc(ap.ssid) + '</strong> e apri ' + apLink +
+        ': in alto vedi la rete e l\'indirizzo attuali.</li></ul>';
+    if (stillTrying) body += '<br><span class="spin"></span>Intanto continuo a controllare…';
+    setStatus('Controlla il collegamento', body, 'msg-warn', !stillTrying);
+    show('st-retry', !stillTrying);
+  }
+
+  function waitConnected(t0, limit) {
     clearTimeout(pollTimer);
     pollTimer = setTimeout(function () {
-      api('action=info').then(function (i) {
+      api('action=info', null, 5000).then(function (i) {
+        lastContact = Date.now();
         if (i.connected && i.ssid === target) {
           setStatus('Collegato a "' + target + '"',
-            'Indirizzo ottenuto: <strong>' + i.ip + '</strong>', 'msg-ok', true);
+            'Indirizzo ottenuto: <strong>' + esc(i.ip) + '</strong>', 'msg-ok', true);
           loadInfo();
-          return;
-        }
-        throw 0;
-      }).catch(function () {
-        if (Date.now() - t0 > 90000) {
-          fail('Non riesco a collegarmi a "' + target + '". Controlla nome e password e che la rete sia a portata, poi riprova. ' +
-               'Se non vedi più questa pagina, ricollegati a <strong>Omega-3932</strong>.');
+        } else if (Date.now() - t0 > limit) {
+          fail('Non riesco a collegarmi a "' + esc(target) + '". Controlla nome e password e che la rete sia a portata, poi riprova.' +
+               (i.connected ? '<br><br>Per ora l\'Omega è ancora collegato a <strong>' + esc(i.ssid) + '</strong>.' : ''));
         } else {
-          waitConnected(t0);
+          waitConnected(t0, limit);
         }
+      }, function () {
+        // No answer: the AP is restarting, or the Omega has left the network this page goes through.
+        if (Date.now() - t0 > limit) return lost(false);
+        if (!lostShown && !viaAp() && target !== cur && Date.now() - lastContact > LOST_MS) lost(true);
+        waitConnected(t0, limit);
       });
     }, 3000);
   }
@@ -330,6 +385,12 @@
     if (this.open && !scanDone) scan(0);
   });
   $('rescan').addEventListener('click', function () { scan(0); });
+  $('st-retry').addEventListener('click', function () {
+    lostShown = false;
+    lastContact = Date.now();
+    setStatus('Controllo in corso…', '<span class="spin"></span>Cerco l\'Omega…', '', false);
+    waitConnected(Date.now(), 15000);
+  });
   $('st-back').addEventListener('click', function () {
     show('status-card', false); show('form-card', true);
     loadInfo();

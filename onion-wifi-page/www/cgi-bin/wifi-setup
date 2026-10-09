@@ -1,7 +1,7 @@
 #!/bin/sh
 # CGI for the standalone WiFi page (/wifi/).
 #   GET  ?action=scan  -> nearby networks (passthrough of `onion wifi-scan`)
-#   GET  ?action=info  -> current client connection (ssid, ip, connected)
+#   GET  ?action=info  -> current client connection (ssid, ip, connected) and own AP (ap_ssid, ap_ip)
 #   POST ?action=join  -> body JSON {"ssid":b64,"password":b64,"enc":"psk2|psk|wep|none"}
 # All user input is validated before it reaches any command; nothing is eval'd.
 
@@ -9,7 +9,9 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 . /usr/share/libubox/jshn.sh
 
 LOCK=/tmp/wifi-setup.lock
+PENDING=/tmp/wifi-setup.pending   # token of the latest join, checked by its background job
 MAX_SAVED=5
+WATCH_SECS=120                    # how long the background job waits for the new network
 
 echo "Content-Type: application/json"
 echo "Cache-Control: no-store"
@@ -23,6 +25,39 @@ fail() {
 	exit 0
 }
 
+client_ssid() { iwinfo apcli0 info 2>/dev/null | sed -n 's/^.*ESSID: "\(.*\)"$/\1/p'; }
+client_ip() { ip -4 -o addr show apcli0 2>/dev/null | awk '{print $4}' | cut -d/ -f1; }
+saved_count() { uci -q show wireless | grep -c '^wireless\.@wifi-config\[[0-9]*\]=wifi-config'; }
+latest_join() { [ "$(cat "$PENDING" 2>/dev/null)" = "$1" ]; }
+
+# Background job started by a join. Applies the change once the HTTP response is
+# out (the AP restarts and drops clients for a few seconds), then waits for the new
+# network: when the Omega is on it, the other saved client networks are forgotten.
+# If it never comes up they stay, so the Omega can fall back to them.
+# Only wifi-config sections (client networks) are deleted: the Omega's own access
+# point is a wifi-iface and is never touched.
+apply_and_forget() {
+	token=$1 ssid=$2 n=0
+	sleep 3
+	latest_join "$token" || return 0	# a newer join applies its own change
+	wifi reload
+	while [ $n -lt $((WATCH_SECS / 3)) ]; do
+		sleep 3
+		n=$((n + 1))
+		latest_join "$token" || return 0
+		[ "$(client_ssid)" = "$ssid" ] && [ -n "$(client_ip)" ] || continue
+		mkdir "$LOCK" 2>/dev/null || continue	# a join is running: look again next round
+		if latest_join "$token" && [ "$(uci -q get 'wireless.@wifi-config[0].ssid')" = "$ssid" ]; then
+			while [ "$(saved_count)" -gt 1 ]; do
+				uci delete 'wireless.@wifi-config[-1]' && uci commit wireless || break
+			done
+			rm -f "$PENDING"
+		fi
+		rmdir "$LOCK"
+		return 0
+	done
+}
+
 action=$(printf '%s' "$QUERY_STRING" | sed -n 's/.*action=\([a-z]*\).*/\1/p')
 
 case "$action" in
@@ -32,12 +67,17 @@ scan)
 	;;
 
 info)
-	essid=$(iwinfo apcli0 info 2>/dev/null | sed -n 's/^.*ESSID: "\(.*\)"$/\1/p')
-	ip=$(ip -4 -o addr show apcli0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+	essid=$(client_ssid)
+	ip=$(client_ip)
+	ap_iface=$(uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)\.mode='ap'$/\1/p" | head -n 1)
+	ap_net=$(uci -q get "wireless.$ap_iface.network")
+	ap_ip=$(uci -q get "network.${ap_net%% *}.ipaddr")
 	json_init
 	json_add_string ssid "$essid"
 	json_add_string ip "$ip"
 	json_add_string preferred "$(uci -q get wireless.@wifi-config[0].ssid)"
+	json_add_string ap_ssid "$(uci -q get "wireless.$ap_iface.ssid")"
+	json_add_string ap_ip "${ap_ip%%/*}"
 	[ -n "$essid" ] && [ -n "$ip" ] && json_add_boolean connected 1 || json_add_boolean connected 0
 	json_dump
 	;;
@@ -79,13 +119,15 @@ join)
 		|| fail "add"
 	wifisetup -j -b64 priority -ssid "$ssid_b64" -move "$top_b64" >/dev/null 2>&1
 
-	# keep the saved list short: previous networks stay as fallback, oldest ones go
-	while [ "$(uci -q show wireless | grep -c '^wireless\.@wifi-config\[[0-9]*\]=wifi-config')" -gt "$MAX_SAVED" ]; do
+	# until the new network is confirmed the previous ones stay as fallback; oldest ones go
+	while [ "$(saved_count)" -gt "$MAX_SAVED" ]; do
 		uci delete 'wireless.@wifi-config[-1]' && uci commit wireless || break
 	done
 
-	# apply after the response is sent: the AP restarts and drops clients for a few seconds
-	( sleep 3; wifi reload ) </dev/null >/dev/null 2>&1 &
+	# the job must not inherit the EXIT trap: it would release a lock it does not own
+	token="$$.$(date +%s)"
+	echo "$token" > "$PENDING"
+	( trap - EXIT; apply_and_forget "$token" "$ssid" ) </dev/null >/dev/null 2>&1 &
 
 	json_init
 	json_add_boolean ok 1

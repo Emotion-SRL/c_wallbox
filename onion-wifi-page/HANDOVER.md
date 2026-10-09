@@ -72,15 +72,27 @@ pagina: oggi contiene `EmotionWiFi` (priorità massima) e `A16 di Carlo Maria`
 
 ### 4.2 Il CGI `wifi-setup`
 
-- `?action=info` → `{ssid, ip, preferred, connected}` (da `iwinfo apcli0` e `ip`).
+- `?action=info` → `{ssid, ip, preferred, connected, ap_ssid, ap_ip}` (da
+  `iwinfo apcli0`, `ip` e, per l'AP, dalla `wifi-iface` con `mode='ap'` in uci).
 - `?action=scan` → output di `ubus call onion wifi-scan '{"device":"ra0"}'`
   (la scansione dura 4–8 s).
 - `?action=join` (POST, JSON con ssid/password in base64 e `enc`): valida
   tutto (charset base64, lunghezze, `enc` in lista fissa), poi `wifisetup add`,
-  `wifisetup priority … top`, taglia la lista a 5 reti, e lancia `wifi reload`
-  **in background dopo 3 s** (così la risposta HTTP parte prima che l'AP si
-  riavvii).
-- Un lock `/tmp/wifi-setup.lock` evita due cambi contemporanei (scade dopo 2 min).
+  `wifisetup priority … top`, taglia la lista a 5 reti e avvia un job in
+  background (`apply_and_forget`) che:
+  - lancia `wifi reload` **dopo 3 s** (così la risposta HTTP parte prima che
+    l'AP si riavvii);
+  - controlla ogni 3 s, per 2 min, se `apcli0` è sulla nuova rete con un IP;
+  - quando lo è, **dimentica le altre reti salvate** (cancella le
+    `wifi-config` dalla seconda in poi). L'AP dell'Omega è una `wifi-iface`
+    e non viene toccato. Se la nuova rete non arriva, le vecchie restano come
+    riserva.
+  Il token in `/tmp/wifi-setup.pending` fa sì che, se arriva un altro cambio,
+  il job precedente si fermi. Le reti cancellate non vengono riapplicate con un
+  altro `wifi reload` (taglierebbe di nuovo la connessione): **da verificare**
+  se `ap_client` le tiene in memoria fino al prossimo reload/riavvio.
+- Un lock `/tmp/wifi-setup.lock` evita due cambi contemporanei (scade dopo 2 min);
+  il job lo prende anche lui mentre cancella le reti.
 - **Non usare** il percorso standard `ubus call onion wifi-setup`: `rpcd`
   costruisce il comando con `eval`, quindi input libero è pericoloso. Il CGI
   chiama `wifisetup` direttamente.
@@ -90,8 +102,20 @@ pagina: oggi contiene `EmotionWiFi` (priorità massima) e `A16 di Carlo Maria`
 Form principale (nome rete, password, "Mostra"), tipo di sicurezza in
 "Opzioni avanzate", elenco reti **facoltativo** (si carica solo quando lo si
 apre, con 2 ritentativi silenziosi). Dopo l'invio fa polling di `?action=info`
-ogni 3 s fino a 90 s. Se la connessione cade perché l'AP si riavvia, continua a
-riprovare.
+ogni 3 s fino a 90 s (ogni richiesta scade dopo 5 s). Se la connessione cade
+perché l'AP si riavvia, continua a riprovare.
+
+La pagina distingue come è stata aperta (`location.hostname` uguale a `ap_ip`
+o no):
+- **dall'AP dell'Omega**: se a fine attesa non risponde più, mostra "Controlla
+  il collegamento" (ricollegati all'AP, poi "Controlla di nuovo");
+- **dalla rete a cui è collegato l'Omega** (casa/ufficio): cambiando rete
+  l'Omega sparisce da lì. Dopo 15 s senza risposta mostra "Controlla il
+  collegamento" con dove cercarlo (nuova rete o AP), in giallo e non come
+  errore, e intanto continua a controllare.
+
+"Non riuscito" (rosso) compare solo se l'Omega risponde ma non è sulla nuova
+rete (es. password sbagliata e ritorno alla rete precedente).
 
 ## 5. Cose da sapere prima di toccare il dispositivo
 

@@ -26,19 +26,31 @@ ssh root@<omega-ip> 'cat > /www/wifi/index.html'        < www/wifi/index.html
 ssh root@<omega-ip> 'cat > /www/cgi-bin/wifi-setup && chmod 755 /www/cgi-bin/wifi-setup' < www/cgi-bin/wifi-setup
 ```
 
+From a Windows checkout with `core.autocrlf=true` the files have CRLF line
+endings, and the CGI will not run on the Omega with them. Strip them while copying:
+`tr -d '\r' < www/cgi-bin/wifi-setup | ssh root@<omega-ip> 'cat > /www/cgi-bin/wifi-setup && chmod 755 /www/cgi-bin/wifi-setup'`.
+
 `/www` lives on the overlay, so it survives reboots; a firmware upgrade may
 overwrite it.
 
 ## How it works
 
-- `GET  /cgi-bin/wifi-setup?action=info`  current client connection (ssid, ip)
+- `GET  /cgi-bin/wifi-setup?action=info`  current client connection (ssid, ip) and the Omega's own AP (ap_ssid, ap_ip)
 - `GET  /cgi-bin/wifi-setup?action=scan`  nearby networks (`ubus call onion wifi-scan`)
 - `POST /cgi-bin/wifi-setup?action=join`  JSON `{"ssid": b64, "password": b64, "enc": "psk2|psk|wep|none"}`
 
 `join` validates every field (base64 charset, lengths, fixed encryption list),
 then runs `wifisetup add` and `wifisetup priority ... top`, keeps at most 5
-saved networks (previous ones stay as fallback) and finally runs
-`wifi reload` in the background. Nothing user-supplied is `eval`'d.
+saved networks and starts a background job that runs `wifi reload` and waits
+up to 2 minutes for the new network. Once the Omega is on it, the other saved
+client networks are forgotten. If it never comes up they stay, as fallback. The
+Omega's own access point is a separate `wifi-iface` and is never touched.
+Nothing user-supplied is `eval`'d.
+
+The page knows whether it was opened through the Omega's AP or through the
+network the Omega is a client of. In the second case, changing network takes
+the page's connection away: instead of an error it shows a "check" message
+saying where to find the Omega (the new network, or its AP).
 
 ## Known limitations
 
