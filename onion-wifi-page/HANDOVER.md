@@ -45,6 +45,8 @@ Per leggere i sorgenti originali di OnionOS: i file
 |---|---|
 | Pagina | `/www/wifi/index.html` → `http://<ip>/wifi/` |
 | CGI | `/www/cgi-bin/wifi-setup` (755) |
+| Home → pagina WiFi | `/www/index.html` (prima rimandava a `/OnionOS`, che resta raggiungibile a mano) |
+| Originale di `/www/index.html` | `/root/index.html.onionos` |
 | Backup pre-modifica di `/www` e `/etc/config` | `/root/backup-pre-wifipage-20261008-163149.tar.gz` |
 | Chiave RSA di Carlo | riga in `/etc/dropbear/authorized_keys` |
 
@@ -182,6 +184,7 @@ Non è bloccante: la pagina funziona anche senza scansione.
 ```sh
 # sul dispositivo
 rm -rf /www/wifi /www/cgi-bin/wifi-setup
+cp /root/index.html.onionos /www/index.html     # la home torna a OnionOS
 # ripristino completo di /www e /etc/config dal backup (sovrascrive tutto!)
 tar xzf /root/backup-pre-wifipage-20261008-163149.tar.gz -C /
 ```

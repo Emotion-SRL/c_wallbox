@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configura WiFi</title>
+<!-- Replaces OnionOS's /www/index.html: the device's home goes to the WiFi page.
+     OnionOS is still installed and reachable at /OnionOS/. -->
+<meta http-equiv="refresh" content="0; url=/wifi/">
+<script>location.replace('/wifi/');</script>
+<style>
+  body { margin: 0; padding: 24px 16px; background: #f4f5f7; color: #1d2330;
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: #2f5bd8; }
+  @media (prefers-color-scheme: dark) { body { background: #12151c; color: #e8ebf2; } a { color: #6f93ff; } }
+</style>
+</head>
+<body>
+  <a href="/wifi/">Apri la configurazione WiFi</a>
+</body>
+</html>

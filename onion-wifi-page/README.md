@@ -11,9 +11,13 @@ Tested on OpenWrt 18.06 (OnionOS 0.3.3), `uhttpd`, Dropbear SSH.
 |--------------------------|-----------------------------------|------|
 | `www/wifi/index.html`    | `/www/wifi/index.html`            | 644  |
 | `www/cgi-bin/wifi-setup` | `/www/cgi-bin/wifi-setup`         | 755  |
+| `www/index.html`         | `/www/index.html` (replaces OnionOS's) | 644  |
 
 The page is then reachable at `http://<omega-ip>/wifi/`, or at
 `http://192.168.3.1/wifi/` when connected to the Omega's own access point.
+`www/index.html` sends the device's home page (`http://<omega-ip>/`) to the
+WiFi page instead of OnionOS. OnionOS stays installed at `/OnionOS/`; keep a
+copy of the original before overwriting it.
 
 ## Install
 
@@ -24,6 +28,7 @@ Dropbear in this OpenWrt release does not support ed25519 keys: use an RSA key
 ssh root@<omega-ip> 'mkdir -p /www/wifi'
 ssh root@<omega-ip> 'cat > /www/wifi/index.html'        < www/wifi/index.html
 ssh root@<omega-ip> 'cat > /www/cgi-bin/wifi-setup && chmod 755 /www/cgi-bin/wifi-setup' < www/cgi-bin/wifi-setup
+ssh root@<omega-ip> '[ -f /root/index.html.onionos ] || cp /www/index.html /root/index.html.onionos; cat > /www/index.html' < www/index.html
 ```
 
 From a Windows checkout with `core.autocrlf=true` the files have CRLF line
