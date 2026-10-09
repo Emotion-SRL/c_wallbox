@@ -43,7 +43,9 @@ overwrite it.
 then runs `wifisetup add` and `wifisetup priority ... top`, keeps at most 5
 saved networks and starts a background job that runs `wifi reload` and waits
 up to 2 minutes for the new network. Once the Omega is on it, the other saved
-client networks are forgotten. If it never comes up they stay, as fallback. The
+client networks are forgotten and the WiFi is reloaded once more, because
+`ap_client` keeps the list it was started with and would otherwise still fall
+back to them. If the new network never comes up the old ones stay, as fallback. The
 Omega's own access point is a separate `wifi-iface` and is never touched.
 Nothing user-supplied is `eval`'d.
 

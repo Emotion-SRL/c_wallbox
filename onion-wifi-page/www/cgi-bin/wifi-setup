@@ -32,8 +32,9 @@ latest_join() { [ "$(cat "$PENDING" 2>/dev/null)" = "$1" ]; }
 
 # Background job started by a join. Applies the change once the HTTP response is
 # out (the AP restarts and drops clients for a few seconds), then waits for the new
-# network: when the Omega is on it, the other saved client networks are forgotten.
-# If it never comes up they stay, so the Omega can fall back to them.
+# network: when the Omega is on it, the other saved client networks are forgotten
+# and the WiFi is reloaded once more. If it never comes up they stay, so the Omega
+# can fall back to them.
 # Only wifi-config sections (client networks) are deleted: the Omega's own access
 # point is a wifi-iface and is never touched.
 apply_and_forget() {
@@ -47,13 +48,20 @@ apply_and_forget() {
 		latest_join "$token" || return 0
 		[ "$(client_ssid)" = "$ssid" ] && [ -n "$(client_ip)" ] || continue
 		mkdir "$LOCK" 2>/dev/null || continue	# a join is running: look again next round
+		forgot=0
 		if latest_join "$token" && [ "$(uci -q get 'wireless.@wifi-config[0].ssid')" = "$ssid" ]; then
 			while [ "$(saved_count)" -gt 1 ]; do
 				uci delete 'wireless.@wifi-config[-1]' && uci commit wireless || break
+				forgot=1
 			done
 			rm -f "$PENDING"
 		fi
 		rmdir "$LOCK"
+		# ap_client keeps the list it was started with and would still fall back to the
+		# forgotten networks: reload so it restarts with the new one alone. This drops the
+		# AP for a few seconds, so wait a little to let a page polling through it see the
+		# success first. Skip it if a newer join is pending: its own reload will do.
+		[ $forgot = 1 ] && { sleep 5; [ -f "$PENDING" ] || wifi reload; }
 		return 0
 	done
 }

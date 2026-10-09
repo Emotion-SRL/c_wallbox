@@ -114,6 +114,17 @@
       <button type="submit" class="primary" id="join">Collega</button>
     </form>
 
+    <details id="scan-box" open>
+      <summary>Scegli tra le reti trovate</summary>
+      <div class="sub">
+        <div class="row">
+          <span class="label" id="scan-state"></span>
+          <button type="button" class="small" id="rescan">Aggiorna</button>
+        </div>
+        <ul id="nets"></ul>
+      </div>
+    </details>
+
     <details id="adv">
       <summary>Opzioni avanzate</summary>
       <div class="sub">
@@ -124,17 +135,6 @@
           <option value="wep">WEP</option>
           <option value="none">Nessuna (rete aperta)</option>
         </select>
-      </div>
-    </details>
-
-    <details id="scan-box">
-      <summary>Scegli tra le reti trovate</summary>
-      <div class="sub">
-        <div class="row">
-          <span class="label" id="scan-state"></span>
-          <button type="button" class="small" id="rescan">Aggiorna</button>
-        </div>
-        <ul id="nets"></ul>
       </div>
     </details>
   </section>
@@ -161,6 +161,7 @@
   var pollTimer = null;
   var scanned = {};       // ssid -> encryption, filled by the (optional) scan
   var scanDone = false;
+  var scanning = false;
   var cur = '';           // network the Omega was on when this page last read it
   var ap = { ssid: 'Omega-3932', ip: '192.168.3.1' };  // the Omega's own access point, refreshed by loadInfo
   var tStart = 0;         // when the user asked for the change
@@ -294,7 +295,9 @@
       api('action=info', null, 5000).then(function (i) {
         if (i.connected && i.ssid === target) {
           setStatus('Collegato a "' + target + '"',
-            'Indirizzo ottenuto: <strong>' + esc(i.ip) + '</strong>', 'msg-ok', true);
+            'Indirizzo ottenuto: <strong>' + esc(i.ip) + '</strong><br><br>' +
+            'Tra pochi secondi la WiFi potrebbe riavviarsi ancora una volta per dimenticare le reti vecchie: ' +
+            'se la pagina si scollega per un attimo, è normale.', 'msg-ok', true);
           loadInfo();
         } else if (Date.now() - t0 > limit) {
           fail('Non riesco a collegarmi a "' + esc(target) + '". Controlla nome e password e che la rete sia a portata, poi riprova.' +
@@ -325,7 +328,6 @@
     $('ssid').value = ssid;
     $('enc').value = enc;
     syncEnc();
-    $('scan-box').open = false;
     $('ssid').scrollIntoView({ block: 'center' });
     (enc === 'none' ? $('join') : $('pw')).focus();
   }
@@ -333,10 +335,11 @@
   // The scan is only a convenience: the device sometimes answers with an empty body,
   // so retry quietly a couple of times and then point the user to manual entry.
   function scan(attempt) {
+    scanning = true;
     $('scan-state').innerHTML = '<span class="spin"></span>Ricerca in corso…';
     $('rescan').disabled = true;
     $('nets').innerHTML = '';
-    api('action=scan').then(function (d) {
+    return api('action=scan').then(function (d) {
       // keep the strongest entry per ssid, skip hidden ones
       var best = {};
       (d.results || []).forEach(function (n) {
@@ -366,9 +369,10 @@
       });
       scanDone = true;
     }).catch(function () {
-      if (attempt < 2) return scan(attempt + 1);
+      // back-to-back scans fail more often: pause before retrying
+      if (attempt < 2) return new Promise(function (r) { setTimeout(r, 2000); }).then(function () { return scan(attempt + 1); });
       $('scan-state').textContent = 'Non riesco a elencare le reti: scrivi il nome a mano.';
-    }).then(function () { $('rescan').disabled = false; });
+    }).then(function () { scanning = false; $('rescan').disabled = false; });
   }
 
   /// wiring ///
@@ -382,7 +386,7 @@
     this.textContent = hidden ? 'Nascondi' : 'Mostra';
   });
   $('scan-box').addEventListener('toggle', function () {
-    if (this.open && !scanDone) scan(0);
+    if (this.open && !scanDone && !scanning) scan(0);
   });
   $('rescan').addEventListener('click', function () { scan(0); });
   $('st-retry').addEventListener('click', function () {
@@ -398,6 +402,7 @@
 
   syncEnc();
   loadInfo();
+  if ($('scan-box').open) scan(0);   // the list starts open: search right away
 })();
 </script>
 </body>

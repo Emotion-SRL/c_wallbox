@@ -87,10 +87,15 @@ pagina: oggi contiene `EmotionWiFi` (priorità massima) e `A16 di Carlo Maria`
     `wifi-config` dalla seconda in poi). L'AP dell'Omega è una `wifi-iface`
     e non viene toccato. Se la nuova rete non arriva, le vecchie restano come
     riserva.
+  - dopo averle cancellate, attende 5 s e lancia **un secondo `wifi reload`**:
+    `ap_client` viene avviato da `ralink.sh` con la lista delle reti e la
+    tiene in memoria (si vede con `ps w | grep ap_client`), quindi senza
+    reload continuerebbe a ricollegarsi da solo alle reti dimenticate.
+    Verificato sul dispositivo il 2026-10-09. Il reload stacca anche l'AP per
+    qualche secondo (radio unica); `ap_client` è registrato in netifd
+    (`wireless_add_process`), quindi non si può riavviare da solo.
   Il token in `/tmp/wifi-setup.pending` fa sì che, se arriva un altro cambio,
-  il job precedente si fermi. Le reti cancellate non vengono riapplicate con un
-  altro `wifi reload` (taglierebbe di nuovo la connessione): **da verificare**
-  se `ap_client` le tiene in memoria fino al prossimo reload/riavvio.
+  il job precedente si fermi (e salti il secondo reload).
 - Un lock `/tmp/wifi-setup.lock` evita due cambi contemporanei (scade dopo 2 min);
   il job lo prende anche lui mentre cancella le reti.
 - **Non usare** il percorso standard `ubus call onion wifi-setup`: `rpcd`
@@ -99,9 +104,10 @@ pagina: oggi contiene `EmotionWiFi` (priorità massima) e `A16 di Carlo Maria`
 
 ### 4.3 La pagina
 
-Form principale (nome rete, password, "Mostra"), tipo di sicurezza in
-"Opzioni avanzate", elenco reti **facoltativo** (si carica solo quando lo si
-apre, con 2 ritentativi silenziosi). Dopo l'invio fa polling di `?action=info`
+Form principale (nome rete, password, "Mostra"), sotto l'elenco delle reti
+trovate, **già aperto**: la ricerca parte all'apertura della pagina, con 2
+ritentativi silenziosi; si può sempre scrivere il nome a mano. In fondo
+"Opzioni avanzate" con il tipo di sicurezza. Dopo l'invio fa polling di `?action=info`
 ogni 3 s fino a 90 s (ogni richiesta scade dopo 5 s). Se la connessione cade
 perché l'AP si riavvia, continua a riprovare.
 
